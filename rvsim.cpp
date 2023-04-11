@@ -59,7 +59,12 @@ void loadELF(const char *filename,
 
     // Check header information.
     Elf32_Ehdr *header = elf32_getehdr(elf);
-    assert(header->e_type == ET_EXEC && "expected executable ELF");
+    if (!(header->e_type == ET_EXEC &&
+          header->e_ident[EI_CLASS] == ELFCLASS32 &&
+          header->e_ident[EI_DATA] == ELFDATA2LSB &&
+          header->e_machine == EM_RISCV)) {
+      throw std::runtime_error("Unexpected ELF header");
+    }
 
     Elf_Scn *section = nullptr;
     GElf_Shdr sectionHeader;
@@ -92,6 +97,7 @@ void loadELF(const char *filename,
             std::memcpy(reinterpret_cast<char*>(memory.data()) + sectionHeader.sh_addr - startAddr,
                         data->d_buf,
                         sectionHeader.sh_size);
+            std::cout << "Loaded " << sectionHeader.sh_size << " bytes into memory\n";
           } else {
             // Skip.
           }

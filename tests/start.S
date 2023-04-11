@@ -19,5 +19,7 @@ zero_bss_end:
   la sp, _stack_pointer
   # Branch and link to main
   jal ra, main
-  # Halt
-
+  # Exit with return code
+  li a0 0
+  li a1 0 # TODO return code from main.
+  ecall
