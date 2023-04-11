@@ -1,4 +1,5 @@
 #include <array>
+#include <cassert>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -14,7 +15,7 @@
 #include "rvsim.hpp"
 
 static void help(const char *argv[]) {
-  std::cout << "RISC-V (R32IM) emulator\n";
+  std::cout << "RISC-V (R32IM) simulator\n";
   std::cout << "\n";
   std::cout << "Usage: " << argv[0] << " file\n";
   std::cout << "\n";
@@ -55,6 +56,10 @@ void loadELF(const char *filename,
     // Create an ELF data structure.
     elf_version(EV_CURRENT);
     Elf *elf = elf_memory(reinterpret_cast<char*>(ELFcontents.data()), fileSize);
+
+    // Check header information.
+    Elf32_Ehdr *header = elf32_getehdr(elf);
+    assert(header->e_type == ET_EXEC && "expected executable ELF");
 
     Elf_Scn *section = nullptr;
     GElf_Shdr sectionHeader;
