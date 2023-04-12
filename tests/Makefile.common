@@ -2,16 +2,16 @@ CC = riscv32-unknown-elf-gcc
 CFLAGS ?= -static -mcmodel=medany -march=rv32im -nostdlib
 LINKER_SCRIPT ?= memory.ld
 
-empty.elf: empty.c memory.ld
+$(PROGRAM_NAME).elf: $(C_SOURCES) memory.ld
 	$(CC) $(CFLAGS) -T $(LINKER_SCRIPT) $< -o $@
 
-empty.dis: empty.elf
+$(PROGRAM_NAME).dis: $(PROGRAM_NAME).elf
 	riscv32-unknown-elf-objdump -D $< > $@
 
 .PHONY: all clean
 
-all: empty.elf empty.dis
+all: $(PROGRAM_NAME).elf $(PROGRAM_NAME).dis
 
 clean:
-		rm -rf empty.dis empty.elf
-
+		rm -rf $(PROGRAM_NAME).dis \
+			     $(PROGRAM_NAME).elf

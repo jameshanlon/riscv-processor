@@ -25,4 +25,3 @@ putchar:
 getchar:
   li a0, 2
   ecall
-
