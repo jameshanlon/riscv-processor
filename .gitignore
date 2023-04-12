@@ -1,4 +1,5 @@
 build/
 *.dis
 *.elf
+*.asm.o
 *.o

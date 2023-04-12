@@ -30,6 +30,6 @@ all: $(PROGRAM_NAME).elf $(PROGRAM_NAME).dis
 
 clean:
 		rm -rf $(PROGRAM_NAME).dis \
-			     $(PROGRAM_NAME).elf \
+           $(PROGRAM_NAME).elf \
            $(KERNEL_ASM_OBJS) \
-					 $(PROGRAM_C_OBJS)
+           $(PROGRAM_C_OBJS)
