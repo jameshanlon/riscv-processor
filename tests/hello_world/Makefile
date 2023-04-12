@@ -1,4 +1,4 @@
-include ../Makefile.common
+PROGRAM_NAME=hello_world
+PROGRAM_C_SRCS=hello_world.c
 
-PROG_NAME=hello_world
-C_SOURCES=hello_world.c
+include ../Makefile.common

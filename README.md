@@ -50,3 +50,8 @@ $ make -C tests/hello_world
 $ ./build/rvsim tests/hello_world/hello_world.elf
 Hello World
 ```
+
+Or using Spike for reference:
+```
+$ spike --isa=RV32IM tests/hello_world/hello_world.elf -m0x100000:0x200000
+```

@@ -1,9 +1,25 @@
-CC = riscv32-unknown-elf-gcc
-CFLAGS ?= -static -mcmodel=medany -march=rv32im -nostdlib
-LINKER_SCRIPT ?= memory.ld
+TESTS_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+LINKER_SCRIPT ?= $(TESTS_DIR)/runtime/memory.ld
 
-$(PROGRAM_NAME).elf: $(C_SOURCES) memory.ld
-	$(CC) $(CFLAGS) -T $(LINKER_SCRIPT) $< -o $@
+CC = riscv32-unknown-elf-gcc
+CFLAGS ?= -static -mcmodel=medany -march=rv32im -nostdlib -I$(TESTS_DIR)/runtime
+
+AS = riscv32-unknown-elf-as
+ASFLAGS ?= -march=rv32im
+
+KERNEL_ASM_SRCS = $(TESTS_DIR)/runtime/syscall.S
+KERNEL_ASM_OBJS = $(KERNEL_ASM_SRCS:.S=.asm.o)
+
+PROGRAM_C_OBJS = $(PROGRAM_C_SRCS:.c=.o)
+
+%.asm.o: %.S
+	$(AS) $(ASFLAGS) $< -o $@
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(PROGRAM_NAME).elf: $(LINKER_SCRIPT) $(KERNEL_ASM_OBJS) $(PROGRAM_C_OBJS)
+	$(CC) $(CFLAGS) -T $(LINKER_SCRIPT) $(KERNEL_ASM_OBJS) $(PROGRAM_C_OBJS) -o $@
 
 $(PROGRAM_NAME).dis: $(PROGRAM_NAME).elf
 	riscv32-unknown-elf-objdump -D $< > $@
@@ -14,4 +30,6 @@ all: $(PROGRAM_NAME).elf $(PROGRAM_NAME).dis
 
 clean:
 		rm -rf $(PROGRAM_NAME).dis \
-			     $(PROGRAM_NAME).elf
+			     $(PROGRAM_NAME).elf \
+           $(KERNEL_ASM_OBJS) \
+					 $(PROGRAM_C_OBJS)

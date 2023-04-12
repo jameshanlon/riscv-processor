@@ -1,5 +1,5 @@
 #pragma once
 
 void exit(int value);
-void putchar(char c);
+int putchar(int c);
 char getchar();

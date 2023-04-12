@@ -7,6 +7,6 @@ void putstr(char *s) {
 }
 
 int main(void) {
-  puts("Hello world!\n");
+  putstr("Hello world!\n");
   return 0;
 }

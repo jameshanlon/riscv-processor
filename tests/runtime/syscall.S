@@ -7,7 +7,7 @@
 .type exit, @function
 .global exit
 exit:
-  li a1, a0
+  mv a1, a0
   li a0, 0
   ecall
 
@@ -15,7 +15,7 @@ exit:
 .type putchar, @function
 .global putchar
 putchar:
-  li a1, a0
+  mv a1, a0
   li a0, 1
   ecall
 
