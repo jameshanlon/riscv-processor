@@ -20,6 +20,6 @@ zero_bss_end:
   # Branch and link to main
   jal ra, main
   # Exit with return code
-  li a0 0
-  li a1 0 # TODO return code from main.
+  li a0, 0
+  li a1, 0 # TODO return code from main.
   ecall

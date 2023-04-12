@@ -7,7 +7,8 @@ CFLAGS ?= -static -mcmodel=medany -march=rv32im -nostdlib -I$(TESTS_DIR)/runtime
 AS = riscv32-unknown-elf-as
 ASFLAGS ?= -march=rv32im
 
-KERNEL_ASM_SRCS = $(TESTS_DIR)/runtime/syscall.S
+KERNEL_ASM_SRCS = $(TESTS_DIR)/runtime/start.S \
+                  $(TESTS_DIR)/runtime/syscall.S
 KERNEL_ASM_OBJS = $(KERNEL_ASM_SRCS:.S=.asm.o)
 
 PROGRAM_C_OBJS = $(PROGRAM_C_SRCS:.c=.o)

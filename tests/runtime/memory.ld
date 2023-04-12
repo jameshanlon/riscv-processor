@@ -12,16 +12,16 @@ SECTIONS
   .text : {
     *(.text)
   }
-  .data : {
+  .data ALIGN(8): {
     *(.data)
     *(.sdata)
   }
-  .bss ALIGN(4): {
+  .bss ALIGN(8): {
     _bss_start = .;
     *(.bss)
     *(.sbss)
   }
-  . = ALIGN(4);
+  . = ALIGN(8);
   _bss_end = .;
   _stack_pointer = .;
 }
