@@ -14,6 +14,8 @@
 
 #include "rvsim.hpp"
 
+#define EM_RISCV (243)
+
 static void help(const char *argv[]) {
   std::cout << "RISC-V (R32IM) simulator\n";
   std::cout << "\n";
@@ -24,7 +26,6 @@ static void help(const char *argv[]) {
   std::cout << "\n";
   std::cout << "Optional arguments:\n";
   std::cout << "  -h,--help       Display this message\n";
-  std::cout << "  -d,--dump       Dump the binary file contents\n";
   std::cout << "  -t,--trace      Enable instruction tracing\n";
   std::cout << "  --max-cycles N  Limit the number of simulation cycles (default: 0)\n";
 }
@@ -109,16 +110,12 @@ int main(int argc, const char *argv[]) {
   try {
     // Program options.
     const char *filename = nullptr;
-    bool dumpBinary = false;
     bool trace = false;
     size_t maxCycles = 0;
     // Parse the command line.
     for (int i = 1; i < argc; ++i) {
-      if (std::strcmp(argv[i], "-d") == 0 ||
-          std::strcmp(argv[i], "--dump") == 0) {
-        dumpBinary = true;
-      } else if (std::strcmp(argv[i], "-t") == 0 ||
-                 std::strcmp(argv[i], "--trace") == 0) {
+      if (std::strcmp(argv[i], "-t") == 0 ||
+          std::strcmp(argv[i], "--trace") == 0) {
         trace = true;
       } else if (std::strcmp(argv[i], "--max-cycles") == 0) {
         maxCycles = std::stoull(argv[++i]);
@@ -139,17 +136,26 @@ int main(int argc, const char *argv[]) {
       help(argv);
       return 1;
     }
-    // Instance the core.
-    rvsim::R32IM core;
+    // Instance the state and executor.
+    rvsim::RV32HartState state;
+    rvsim::RV32Memory memory;
+    rvsim::RV32Executor executor(state, memory);
     // Load the ELF file.
     std::map<std::string, uint32_t> symbolTable;
-    loadELF(filename, symbolTable, core.memory);
-    //core.setTracing(trace);
-    //core.load(filename, dumpBinary);
-    if (dumpBinary) {
-      return 0;
+    loadELF(filename, symbolTable, memory.memory);
+    size_t cycles = 0;
+    while (true) {
+      if (trace) {
+        executor.step<trace>();
+      } else {
+        executor.step<trace>();
+      }
+      if (cycles == maxCycles) {
+        break;
+      }
+      cycles++;
     }
-    //return p.run();
+    std::cout << std::to_string(cycles) << " cycles\n";
   } catch (std::exception &e) {
     std::cerr << "Error: " << e.what() << "\n";
     return 1;

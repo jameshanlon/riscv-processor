@@ -75,6 +75,8 @@ Hello world%
 
 ## Build the simulator
 
+Dependencies: `libelf`.
+
 For development:
 ```
 $ mkdir build

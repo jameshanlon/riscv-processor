@@ -2,17 +2,18 @@
 
 find_path(LIBELF_INCLUDE_DIRS
   NAMES
-    libelf.h
+    libelf/libelf.h
   PATHS
     /usr/include
-    /usr/include/libelf
     /usr/local/include
-    /usr/local/include/libelf
     /opt/local/include
-    /opt/local/include/libelf
     /sw/include
-    /sw/include/libelf
-    ENV CPATH)
+  ENV CPATH)
+
+# Include the 'libelf' prefix for include paths.
+set(LIBELF_INCLUDE_DIRS
+    "${LIBELF_INCLUDE_DIRS}" "${LIBELF_INCLUDE_DIRS}/libelf"
+    CACHE STRING "" FORCE)
 
 find_library(LIBELF_LIBRARIES
   NAMES
@@ -22,8 +23,8 @@ find_library(LIBELF_LIBRARIES
     /usr/local/lib
     /opt/local/lib
     /sw/lib
-    ENV LIBRARY_PATH
-    ENV LD_LIBRARY_PATH)
+  ENV LIBRARY_PATH
+  ENV LD_LIBRARY_PATH)
 
 include(FindPackageHandleStandardArgs)
 
