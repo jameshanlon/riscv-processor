@@ -146,9 +146,9 @@ int main(int argc, const char *argv[]) {
     size_t cycles = 0;
     while (true) {
       if (trace) {
-        executor.step<trace>();
+        executor.step<true>();
       } else {
-        executor.step<trace>();
+        executor.step<false>();
       }
       if (cycles == maxCycles) {
         break;

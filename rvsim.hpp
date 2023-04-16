@@ -28,8 +28,15 @@ inline uint32_t extractBitRange(uint32_t value, unsigned high, unsigned low) {
 
 inline uint32_t insertBits(uint32_t destination, uint32_t source, unsigned shift, unsigned size) {
   assert(shift + size < 32 && "invalid shift");
-  uint32_t mask = (1 << size) - 1;
+  uint32_t mask = (1U << size) - 1;
   return (destination & ~(mask << shift)) | ((source & mask) << shift);
+}
+
+inline uint32_t signExtend(uint32_t value, unsigned size) {
+  // http://graphics.stanford.edu/~seander/bithacks.html#FixedSignExtend
+  assert(size < 32 && "invalid size");
+  uint32_t mask = 1U << (size - 1);
+  return (value ^ mask) - mask;
 }
 
 class RV32Memory {
@@ -118,6 +125,16 @@ struct InstructionIType : public Instruction {
     funct(extractBitRange(value, 14, 12)) {}
 };
 
+struct InstructionIShamtType : public Instruction {
+  unsigned rd, rs1, shamt, funct;
+  InstructionIShamtType(uint32_t value) :
+    rd(extractBitRange(value, 11, 7)),
+    rs1(extractBitRange(value, 19, 15)),
+    shamt(extractBitRange(value, 24, 20)),
+    funct(insertBits(extractBitRange(value, 14, 12),
+                     extractBitRange(value, 31, 25), 3, 7)) {}
+};
+
 struct InstructionSType : public Instruction {
   unsigned imm, rs1, rs2, funct;
   InstructionSType(uint32_t value) :
@@ -165,109 +182,268 @@ public:
         state(state), memory(memory) {}
 
     template<bool trace>
-    void execute_ADDI(InstructionIType instruction) {}
+    void execute_LUI(const InstructionUType &instruction) {}
 
     template<bool trace>
-    void execute_SLTI(InstructionIType instruction) {}
+    void execute_AUIPC(const InstructionUType &instruction) {}
 
     template<bool trace>
-    void execute_SLTIU(InstructionIType instruction) {}
+    void execute_JAL(const InstructionJType &instruction) {}
 
     template<bool trace>
-    void execute_XORI(InstructionRType instruction) {}
+    void execute_JALR(const InstructionIType &instruction) {}
+
+    /// Add immediate.
+    template<bool trace>
+    void execute_ADDI(const InstructionIType &instruction) {
+      auto rs1 = state.readReg(instruction.rs1);
+      auto result = rs1 + instruction.imm;
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// Set less than immediate.
+    template<bool trace>
+    void execute_SLTI(const InstructionIType &instruction) {
+      int32_t rs1 = state.readReg(instruction.rs1);
+      int32_t imm = signExtend(instruction.imm, 12);
+      auto result = rs1 < imm ? 1 : 0;
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// Set less than immediate unsigned.
+    template<bool trace>
+    void execute_SLTIU(const InstructionIType &instruction) {
+      auto rs1 = state.readReg(instruction.rs1);
+      auto result = rs1 < instruction.imm ? 1 : 0;
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// Bitwise XOR immediate.
+    template<bool trace>
+    void execute_XORI(const InstructionIType &instruction) {
+      auto rs1 = state.readReg(instruction.rs1);
+      auto result = rs1 ^ instruction.imm;
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// Bitwise OR immediate.
+    template<bool trace>
+    void execute_ORI(const InstructionIType &instruction) {
+      auto rs1 = state.readReg(instruction.rs1);
+      auto result = rs1 | instruction.imm;
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// Bitwise AND immediate.
+    template<bool trace>
+    void execute_ANDI(const InstructionIType &instruction) {
+      auto rs1 = state.readReg(instruction.rs1);
+      auto result = rs1 & instruction.imm;
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// Shift left logical immediate.
+    template<bool trace>
+    void execute_SLLI(const InstructionIShamtType &instruction) {
+      auto rs1 = state.readReg(instruction.rs1);
+      auto result = rs1 << instruction.shamt;
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// Shift right logical immediate.
+    template<bool trace>
+    void execute_SRLI(const InstructionIShamtType &instruction) {
+      auto rs1 = state.readReg(instruction.rs1);
+      auto result = rs1 >> instruction.shamt;
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// Shift right arithmetic immediate.
+    template<bool trace>
+    void execute_SRAI(const InstructionIShamtType &instruction) {
+      auto rs1 = state.readReg(instruction.rs1);
+      auto result = rs1 >> instruction.shamt;
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// Add registers.
+    template<bool trace>
+    void execute_ADD(const InstructionRType &instruction) {
+      auto rs1 = state.readReg(instruction.rs1);
+      auto rs2 = state.readReg(instruction.rs2);
+      auto result = rs1 + rs2;
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// Subtract registers.
+    template<bool trace>
+    void execute_SUB(const InstructionRType &instruction) {
+      auto rs1 = state.readReg(instruction.rs1);
+      auto rs2 = state.readReg(instruction.rs2);
+      auto result = rs1 - rs2;
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// Shift left logical.
+    template<bool trace>
+    void execute_SLL(const InstructionRType &instruction) {
+      auto rs1 = state.readReg(instruction.rs1);
+      auto rs2 = state.readReg(instruction.rs2);
+      auto result = rs1 - rs2;
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// Signed less than.
+    template<bool trace>
+    void execute_SLT(const InstructionRType &instruction) {
+      auto rs1 = state.readReg(instruction.rs1);
+      auto rs2 = state.readReg(instruction.rs2);
+      uint32_t result = rs1 < rs2 ? 1U : 0U;
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// Set less than unsigned.
+    template<bool trace>
+    void execute_SLTU(const InstructionRType &instruction) {
+      int32_t rs1 = state.readReg(instruction.rs1);
+      int32_t rs2 = state.readReg(instruction.rs2);
+      uint32_t result = rs1 < rs2 ? 1U : 0U;
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// XOR.
+    template<bool trace>
+    void execute_XOR(const InstructionRType &instruction) {
+      auto rs1 = state.readReg(instruction.rs1);
+      auto rs2 = state.readReg(instruction.rs2);
+      auto result = rs1 ^ rs2;
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// Shift right logical.
+    template<bool trace>
+    void execute_SRL(const InstructionRType &instruction) {
+      auto rs1 = state.readReg(instruction.rs1);
+      auto rs2 = state.readReg(instruction.rs2);
+      auto result = rs1 >> rs2;
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// Shift right arithmetic.
+    template<bool trace>
+    void execute_SRA(const InstructionRType &instruction) {
+      int32_t rs1 = state.readReg(instruction.rs1);
+      int32_t rs2 = state.readReg(instruction.rs2);
+      auto result = rs1 >> rs2;
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// OR registers.
+    template<bool trace>
+    void execute_OR(const InstructionRType &instruction) {
+      auto rs1 = state.readReg(instruction.rs1);
+      auto rs2 = state.readReg(instruction.rs2);
+      auto result = rs1 | rs2;
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// AND registers.
+    template<bool trace>
+    void execute_AND(const InstructionRType &instruction) {
+      auto rs1 = state.readReg(instruction.rs1);
+      auto rs2 = state.readReg(instruction.rs2);
+      auto result = rs1 & rs2;
+      state.writeReg(instruction.rd, result);
+    }
+
+    inline uint32_t effectiveAddress(const InstructionSType &instruction) {
+      auto offset = signExtend(instruction.imm, 12);
+      auto base = instruction.rs1;
+      return base + offset;
+    }
+
+    inline uint32_t effectiveAddress(const InstructionIType &instruction) {
+      auto offset = signExtend(instruction.imm, 12);
+      auto base = instruction.rs1;
+      return base + offset;
+    }
+
+    /// Store byte.
+    template<bool trace>
+    void execute_SB(const InstructionSType &instruction) {
+      memory.writeMemoryByte(effectiveAddress(instruction), instruction.rs2);
+    }
+
+    /// Store half.
+    template<bool trace>
+    void execute_SH(const InstructionSType &instruction) {
+      memory.writeMemoryHalfWord(effectiveAddress(instruction), instruction.rs2);
+    }
+
+    /// Store word.
+    template<bool trace>
+    void execute_SW(const InstructionSType &instruction) {
+      memory.writeMemoryHalfWord(effectiveAddress(instruction), instruction.rs2);
+    }
+
+    /// Load byte (sign extend).
+    template<bool trace>
+    void execute_LB(const InstructionIType &instruction) {
+      auto result = memory.readMemoryByte(effectiveAddress(instruction));
+      state.writeReg(instruction.rd, signExtend(result, 8));
+    }
+
+    /// Load half (sign extend).
+    template<bool trace>
+    void execute_LH(const InstructionIType &instruction) {
+      auto result = memory.readMemoryHalfWord(effectiveAddress(instruction));
+      state.writeReg(instruction.rd, signExtend(result, 16));
+    }
+
+    /// Load word.
+    template<bool trace>
+    void execute_LW(const InstructionIType &instruction) {
+      auto result = memory.readMemoryHalfWord(effectiveAddress(instruction));
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// Load byte (zero extend).
+    template<bool trace>
+    void execute_LBU(const InstructionIType &instruction) {
+      auto result = memory.readMemoryByte(effectiveAddress(instruction));
+      state.writeReg(instruction.rd, result);
+    }
+
+    /// Load half (zero extend).
+    template<bool trace>
+    void execute_LHU(const InstructionIType &instruction) {
+      auto result = memory.readMemoryHalfWord(effectiveAddress(instruction));
+      state.writeReg(instruction.rd, result);
+    }
 
     template<bool trace>
-    void execute_ORI(InstructionIType instruction) {}
+    void execute_BEQ(const InstructionSType &instruction) {}
 
     template<bool trace>
-    void execute_ANDI(InstructionIType instruction) {}
+    void execute_BNE(const InstructionSType &instruction) {}
 
     template<bool trace>
-    void execute_SLLI(InstructionIType instruction) {}
+    void execute_BLT(const InstructionSType &instruction) {}
 
     template<bool trace>
-    void execute_SRLI(InstructionIType instruction) {}
+    void execute_BGE(const InstructionSType &instruction) {}
 
     template<bool trace>
-    void execute_SRAI(InstructionIType instruction) {}
+    void execute_BLTU(const InstructionSType &instruction) {}
 
     template<bool trace>
-    void execute_ADD(InstructionRType instruction) {}
+    void execute_BGEU(const InstructionSType &instruction) {}
 
     template<bool trace>
-    void execute_SUB(InstructionRType instruction) {}
+    void execute_ECALL(const InstructionIType &instruction) {}
 
     template<bool trace>
-    void execute_SLL(InstructionRType instruction) {}
-
-    template<bool trace>
-    void execute_SLT(InstructionRType instruction) {}
-
-    template<bool trace>
-    void execute_SLTU(InstructionRType instruction) {}
-
-    template<bool trace>
-    void execute_XOR(InstructionRType instruction) {}
-
-    template<bool trace>
-    void execute_SRL(InstructionRType instruction) {}
-
-    template<bool trace>
-    void execute_SRA(InstructionRType instruction) {}
-
-    template<bool trace>
-    void execute_OR(InstructionRType instruction) {}
-
-    template<bool trace>
-    void execute_AND(InstructionRType instruction) {}
-
-    template<bool trace>
-    void execute_SB(InstructionRType instruction) {}
-
-    template<bool trace>
-    void execute_SH(InstructionRType instruction) {}
-
-    template<bool trace>
-    void execute_SW(InstructionRType instruction) {}
-
-    template<bool trace>
-    void execute_LB(InstructionRType instruction) {}
-
-    template<bool trace>
-    void execute_LH(InstructionRType instruction) {}
-
-    template<bool trace>
-    void execute_LW(InstructionRType instruction) {}
-
-    template<bool trace>
-    void execute_LBU(InstructionRType instruction) {}
-
-    template<bool trace>
-    void execute_LHU(InstructionRType instruction) {}
-
-    template<bool trace>
-    void execute_BEQ(InstructionSType instruction) {}
-
-    template<bool trace>
-    void execute_BNE(InstructionSType instruction) {}
-
-    template<bool trace>
-    void execute_BLT(InstructionSType instruction) {}
-
-    template<bool trace>
-    void execute_BGE(InstructionSType instruction) {}
-
-    template<bool trace>
-    void execute_BLTU(InstructionSType instruction) {}
-
-    template<bool trace>
-    void execute_BGEU(InstructionSType instruction) {}
-
-    template<bool trace>
-    void execute_ECALL(InstructionIType instruction) {}
-
-    template<bool trace>
-    void execute_EBREAK(InstructionIType instruction) {}
+    void execute_EBREAK(const InstructionIType &instruction) {}
 
     /// Decode and dispatch the instruction.
     template<bool trace>
@@ -330,14 +506,16 @@ public:
             case 0b100: execute_XORI<trace>(immInstr); break;
             case 0b110: execute_ORI<trace>(immInstr); break;
             case 0b111: execute_ANDI<trace>(immInstr); break;
-            case 0b001: execute_SLLI<trace>(InstructionRType(value)); break;
+            case 0b001:
             case 0b101: {
-              auto regInstr = InstructionRType(value);
-              switch (regInstr.funct) {
-                case 0b0000000101: execute_SRLI<trace>(regInstr); break;
-                case 0b0100000101: execute_SRAI<trace>(regInstr); break;
-                default: throw std::runtime_error("unknown OP-IMM funct");
+              auto shInstr = InstructionIShamtType(value);
+              switch (shInstr.funct) {
+                case 0b0000000001: execute_SLLI<trace>(shInstr); break;
+                case 0b0000000101: execute_SRLI<trace>(shInstr); break;
+                case 0b0100000101: execute_SRAI<trace>(shInstr); break;
+                default: throw std::runtime_error("unknown OP-IMM shift funct");
               }
+              break;
             }
             default: throw std::runtime_error("unknown OP-IMM funct");
           }
