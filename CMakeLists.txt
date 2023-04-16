@@ -7,8 +7,11 @@ set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
 find_package(LibElf REQUIRED)
 
+# Options
+option(BUILD_TOOLCHAIN "Build a RISC-V toolchain" OFF)
+
 # Compiler config
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 add_compile_options(-Wall -pedantic)
@@ -18,3 +21,5 @@ include_directories(${LIBELF_INCLUDE_DIRS})
 # Simulator executable
 add_executable(rvsim rvsim.cpp)
 target_link_libraries(rvsim ${LIBELF_LIBRARIES})
+
+#if (BUILD_TOOLCHAIN)
