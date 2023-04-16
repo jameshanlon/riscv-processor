@@ -2,7 +2,7 @@
 
 find_path(LIBELF_INCLUDE_DIRS
   NAMES
-    libelf/libelf.h
+    libelf.h
   PATHS
     /usr/include
     /usr/local/include
@@ -10,10 +10,13 @@ find_path(LIBELF_INCLUDE_DIRS
     /sw/include
   ENV CPATH)
 
-# Include the 'libelf' prefix for include paths.
-set(LIBELF_INCLUDE_DIRS
-    "${LIBELF_INCLUDE_DIRS}" "${LIBELF_INCLUDE_DIRS}/libelf"
-    CACHE STRING "" FORCE)
+# If libelf.h is found in a 'libelf/' directory, also include the parent level
+# as a search path since other ELF headers reside here on some platforms.
+if (LIBELF_INCLUDE_DIRS MATCHES "libelf$")
+  set(LIBELF_INCLUDE_DIRS "${LIBELF_INCLUDE_DIRS}"
+                          "${LIBELF_INCLUDE_DIRS}/.."
+      CACHE STRING "" FORCE)
+endif()
 
 find_library(LIBELF_LIBRARIES
   NAMES
