@@ -76,7 +76,7 @@ void loadELF(const char *filename, std::map<std::string, uint32_t> &symbolTable,
     gelf_getshdr(section, &sectionHeader);
     if (sectionHeader.sh_type == SHT_SYMTAB) {
       Elf_Data *data = elf_getdata(section, nullptr);
-      int count = sectionHeader.sh_size / sectionHeader.sh_entsize;
+      size_t count = sectionHeader.sh_size / sectionHeader.sh_entsize;
       for (size_t i = 0; i < count; i++) {
         GElf_Sym symbol;
         gelf_getsym(data, i, &symbol);

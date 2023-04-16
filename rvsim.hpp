@@ -14,7 +14,7 @@ static const size_t NUM_REGISTERS = 32;
 static const size_t MEMORY_SIZE_WORDS = 1 << 20;
 
 inline uint32_t extractBits(uint32_t value, unsigned shift, unsigned size) {
-  assert(shift + size < 32 && "invalid shift");
+  assert(shift + size <= 32 && "invalid shift");
   return (value >> shift) & ((1 << size) - 1);
 }
 
@@ -214,10 +214,13 @@ public:
 
     #define TRACE_OP_IMM(name, inst, result) \
       do { \
-        std::cout << name << " " \
-                  << instruction.rd << " " \
-                  << instruction.rs1 << " " \
-                  << instruction.imm << "\n"; \
+        if (trace) { \
+          std::cout << state.pc << " " \
+                    << name << " " \
+                    << instruction.rd << " " \
+                    << instruction.rs1 << " " \
+                    << instruction.imm << "\n"; \
+        } \
       } while(0)
 
     void handleEcall() {

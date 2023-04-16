@@ -31,7 +31,7 @@ if (BUILD_GNU_TOOLCHAIN)
   ExternalProject_Add(riscv-gnu-toolchain
     GIT_REPOSITORY https://github.com/riscv-collab/riscv-gnu-toolchain.git
     GIT_SHALLOW ON
-    INSTALL_DIR ${CMAKE_BINARY_DIR}/riscv
+    INSTALL_DIR ${CMAKE_INSTALL_PREFIX}
     CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --with-arch=rv32im
     BUILD_COMMAND make -j ${NUM_PARALLEL_JOBS}
     )
@@ -42,7 +42,7 @@ if (BUILD_PK)
   ExternalProject_Add(riscv-pk
     GIT_REPOSITORY https://github.com/riscv-software-src/riscv-pk.git
     GIT_SHALLOW ON
-    INSTALL_DIR ${CMAKE_BINARY_DIR}/riscv
+    INSTALL_DIR ${CMAKE_INSTALL_PREFIX}
     CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --host=riscv32-unknown-elf
     BUILD_COMMAND make -j ${NUM_PARALLEL_JOBS}
     INSTALL_COMMAND make install
@@ -54,7 +54,7 @@ if (BUILD_SPIKE)
   ExternalProject_Add(riscv-isa-sim
     GIT_REPOSITORY https://github.com/riscv-software-src/riscv-isa-sim.git
     GIT_SHALLOW ON
-    INSTALL_DIR ${CMAKE_BINARY_DIR}/riscv
+    INSTALL_DIR ${CMAKE_INSTALL_PREFIX}
     CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --with-target=riscv32-unknown-elf
     BUILD_COMMAND make -j ${NUM_PARALLEL_JOBS}
     INSTALL_COMMAND make install

@@ -4,7 +4,7 @@ WIP
 
 ## Build the simulator
 
-Dependencies: `libelf`.
+Dependencies: `libelf` (`libelf-dev` on Ubuntu).
 
 For development:
 ```
@@ -36,31 +36,24 @@ Hello world
 
 ## Build the RISC-V tooling
 
-Install dependencies (Ubuntu 22.04):
+Install Ubuntu dependencies:
 ```
 $ sudo apt-get install autoconf automake autotools-dev curl python3 libmpc-dev libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo gperf libtool patchutils bc zlib1g-dev libexpat-dev ninja-build
-$ sudo apt-get install libc6-dev-i386 # 32-bit libc headers (if required)
 $ sudo apt-get install device-tree-compiler # For Spike
 ```
 
-Setup an installation directory.
+Set the following defines in the CMake configure step or the
+`CMakeCache.txt` file:
 ```
-$ export RISCV=/opt/riscv/install
-$ export PATH=`pwd`/install/bin:$PATH
-$ mkdir -p $RISCV
-```
-
-Add the following defines to the CMake configure step (or in the
-CMakeCache.txt):
-```
--DBUILD_GNU_TOOLCHAIN=ON
--DBUILD_PK=ON
--DBUILD_SPIKE=ON
+CMAKE_INSTALL_PREFIX=...
+BUILD_GNU_TOOLCHAIN=ON
+BUILD_PK=ON
+BUILD_SPIKE=ON
 ```
 
-### Test it all works
-
+Test it all works:
 ```
+$ export PATH=<CMAKE_INSTALL_PREFIX>/bin
 $ echo -e '#include <stdio.h>\n int main(void) { printf("Hello world"); return 0; }' > hello.c
 $ riscv32-unknown-elf-gcc hello.c -o hello
 $ spike --isa=RV32IM pk hello
