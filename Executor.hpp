@@ -7,160 +7,34 @@
 #include <iostream>
 #include <exception>
 #include <stdexcept>
+#include <format>
+
+#include "bits.hpp"
+#include "HartState.hpp"
+#include "Memory.hpp"
+#include "Trace.hpp"
+#include "Instructions.hpp"
 
 namespace rvsim {
 
-static const size_t NUM_REGISTERS = 32;
-static const size_t MEMORY_SIZE_WORDS = 1 << 20;
-
-inline uint32_t extractBits(uint32_t value, unsigned shift, unsigned size) {
-  assert(shift + size <= 32 && "invalid shift");
-  return (value >> shift) & ((1 << size) - 1);
-}
-
-inline uint32_t extractBit(uint32_t value, unsigned index) {
-  assert(index < 32 && "invalid shift");
-  return extractBits(value, index, 1);
-}
-
-inline uint32_t extractBitRange(uint32_t value, unsigned high, unsigned low) {
-  assert(high < 32 && "invalid high index");
-  assert(low < high && "invalid range");
-  return extractBits(value, low, 1 + high - low);
-}
-
-inline uint32_t insertBits(uint32_t destination, uint32_t source,
-                           unsigned shift, unsigned size) {
-  assert(shift + size < 32 && "invalid shift");
-  uint32_t mask = (1U << size) - 1;
-  return (destination & ~(mask << shift)) | ((source & mask) << shift);
-}
-
-inline uint32_t signExtend(uint32_t value, unsigned size) {
-  // http://graphics.stanford.edu/~seander/bithacks.html#FixedSignExtend
-  assert(size < 32 && "invalid size");
-  uint32_t mask = 1U << (size - 1);
-  return (value ^ mask) - mask;
-}
-
-class RV32Memory {
-public:
-  std::array<uint32_t, rvsim::MEMORY_SIZE_WORDS> memory;
-
-  uint32_t readMemoryWord(uint32_t address) {
-    assert(!(address & 0x3) && "misaligned word access");
-    return memory[address >> 2];
-  }
-
-  void writeMemoryWord(uint32_t address, uint32_t value) {
-    assert(!(address & 0x3) && "misaligned word access");
-    memory[address >> 2] = value;
-  }
-
-  uint16_t readMemoryHalfWord(uint32_t address) {
-    unsigned shift = address & 0x2;
-    assert(shift == (address & 0x3) && "misaligned half-word access");
-    return extractBits(memory[address >> 2], 16 * shift, 16);
-  }
-
-  void writeMemoryHalfWord(uint32_t address, uint16_t value) {
-    unsigned shift = address & 0x2;
-    assert(shift == (address & 0x3) && "misaligned half-word access");
-    auto existingValue = memory[address >> 2];
-    memory[address >> 2] = insertBits(existingValue, value, 16 * shift, 16);
-  }
-
-  uint8_t readMemoryByte(uint32_t address) {
-    unsigned shift = address & 0x3;
-    return extractBits(memory[address >> 2], 8 * shift, 8);
-  }
-
-  void writeMemoryByte(uint32_t address, uint8_t value) {
-    unsigned shift = address & 0x3;
-    auto existingValue = memory[address >> 2];
-    memory[address >> 2] = insertBits(existingValue, value, 8 * shift, 8);
-  }
+enum Opcode {
+  LUI    = 0b0110111,
+  AUIPC  = 0b0010111,
+  JAL    = 0b1101111,
+  JALR   = 0b1100111,
+  BRANCH = 0b1100011,
+  LOAD   = 0b0000011,
+  STORE  = 0b0100011,
+  OP     = 0b0110011,
+  OP_IMM = 0b0010011,
+  FENCE  = 0b0001111,
+  SYS    = 0b1110011
 };
 
-class RV32HartState {
-public:
-  std::array<uint32_t, NUM_REGISTERS> registers;
-  uint32_t pc;
-
-  RV32HartState() : pc(0) {}
-
-  /// Read a GP register, with special handling for x0.
-  uint32_t readReg(size_t index) {
-    assert(index < NUM_REGISTERS && "register access out of bounds");
-    if (index == 0) {
-      return 0;
-    } else {
-      return registers[index];
-    }
-  }
-
-  /// Write a GP register with special handling for x0.
-  void writeReg(size_t index, uint32_t value) {
-    assert(index < NUM_REGISTERS && "register access out of bounds");
-    if (index > 0) {
-      registers[index] = value;
-    }
-  }
-};
-
-struct Instruction {};
-
-struct InstructionRType : public Instruction {
-  unsigned rd, rs1, rs2, funct;
-  InstructionRType(uint32_t value) :
-    rd(extractBitRange(value, 11, 7)),
-    rs1(extractBitRange(value, 19, 15)),
-    rs2(extractBitRange(value, 20, 24)),
-    funct(insertBits(extractBitRange(value, 14, 12),
-                     extractBitRange(value, 31, 25), 3, 7)) {}
-};
-
-struct InstructionIType : public Instruction {
-  unsigned rd, rs1, imm, funct;
-  InstructionIType(uint32_t value) :
-    rd(extractBitRange(value, 11, 7)),
-    rs1(extractBitRange(value, 19, 15)),
-    imm(extractBitRange(value, 31, 20)),
-    funct(extractBitRange(value, 14, 12)) {}
-};
-
-struct InstructionIShamtType : public Instruction {
-  unsigned rd, rs1, shamt, funct;
-  InstructionIShamtType(uint32_t value) :
-    rd(extractBitRange(value, 11, 7)),
-    rs1(extractBitRange(value, 19, 15)),
-    shamt(extractBitRange(value, 24, 20)),
-    funct(insertBits(extractBitRange(value, 14, 12),
-                     extractBitRange(value, 31, 25), 3, 7)) {}
-};
-
-struct InstructionSType : public Instruction {
-  unsigned imm, rs1, rs2, funct;
-  InstructionSType(uint32_t value) :
-    imm(insertBits(extractBitRange(value, 11, 7),
-                   extractBitRange(value, 31, 25), 5, 7)),
-    rs1(extractBitRange(value, 19, 15)),
-    rs2(extractBitRange(value, 24, 20)),
-    funct(extractBitRange(value, 14, 12)) {}
-};
-
-struct InstructionUType : public Instruction {
-  unsigned rd, imm;
-  InstructionUType(uint32_t value) :
-    rd(extractBitRange(value, 11, 7)),
-    imm(extractBitRange(value, 31, 12)) {}
-};
-
-struct InstructionJType : public Instruction {
-  unsigned rd, imm;
-  InstructionJType(uint32_t value) :
-    rd(extractBitRange(value, 11, 7)),
-    imm(extractBitRange(value, 31, 12)) {}
+enum Ecall {
+  EXIT = 0,
+  GET_CHAR = 1,
+  PUT_CHAR = 2
 };
 
 struct ExitException : public std::exception {
@@ -184,44 +58,35 @@ struct UnknownOpcodeException : public Exception {
     : Exception(std::string("unknown opcode: "+name)) {}
 };
 
-enum Opcode {
-  LUI    = 0b0110111,
-  AUIPC  = 0b0010111,
-  JAL    = 0b1101111,
-  JALR   = 0b1100111,
-  BRANCH = 0b1100011,
-  LOAD   = 0b0000011,
-  STORE  = 0b0100011,
-  OP     = 0b0110011,
-  OP_IMM = 0b0010011,
-  FENCE  = 0b0001111,
-  SYS    = 0b1110011
-};
+#define TRACE(...) \
+  do { \
+    if (trace) { \
+      Trace::get().trace(state, __VA_ARGS__); \
+    } \
+  } while(0)
 
-enum Ecall {
-  EXIT = 0,
-  GET_CHAR = 1,
-  PUT_CHAR = 2
-};
+#define TRACE_REG_WRITE(reg, value) \
+  do { \
+    if (trace) { \
+      Trace::get().regWrite(reg, value); \
+    } \
+  } while(0)
 
-class RV32Executor {
+#define TRACE_END() \
+  do { \
+    if (trace) { \
+      Trace::get().end(); \
+    } \
+  } while(0)
+
+
+class Executor {
 public:
-    RV32HartState &state;
-    RV32Memory &memory;
+    HartState &state;
+    Memory &memory;
 
-    RV32Executor(RV32HartState &state, RV32Memory &memory)
+    Executor(HartState &state, Memory &memory)
         : state(state), memory(memory) {}
-
-    #define TRACE_OP_IMM(name, inst, result) \
-      do { \
-        if (trace) { \
-          std::cout << state.pc << " " \
-                    << name << " " \
-                    << instruction.rd << " " \
-                    << instruction.rs1 << " " \
-                    << instruction.imm << "\n"; \
-        } \
-      } while(0)
 
     void handleEcall() {
       auto ecallID = state.readReg(10);
@@ -246,6 +111,9 @@ public:
     void execute_LUI(const InstructionUType &instruction) {
       auto result = insertBits(0, instruction.imm, 12, 20) | 0xFFF;
       state.writeReg(instruction.rd, result);
+      TRACE("LUI", RegDest(instruction.rd), ImmValue(instruction.imm));
+      TRACE_REG_WRITE(RegDest(instruction.rd), result);
+      TRACE_END();
     }
 
     /// Add upper immediate to PC.
@@ -254,14 +122,22 @@ public:
       auto offset = insertBits(0, instruction.imm, 12, 20) | 0xFFF;
       auto result = state.pc + offset;
       state.writeReg(instruction.rd, result);
+      TRACE("AUIPC", RegDest(instruction.rd), ImmValue(instruction.imm));
+      TRACE_REG_WRITE(RegDest(instruction.rd), result);
+      TRACE_END();
     }
 
     /// Jump and link.
     template <bool trace>
     void execute_JAL(const InstructionJType &instruction) {
       auto offset = signExtend(instruction.imm, 19) << 1;
-      state.writeReg(instruction.rd, state.pc + 4);
+      auto result = state.pc + 4;
+      state.writeReg(instruction.rd, result);
       state.pc += offset;
+      TRACE("JAL", RegDest(instruction.rd), ImmValue(instruction.imm));
+      TRACE_REG_WRITE(RegDest(instruction.rd), result);
+      TRACE_REG_WRITE(Register::pc, state.pc);
+      TRACE_END();
     }
 
     /// Jump and link register.
@@ -274,79 +150,39 @@ public:
       state.pc = targetPC;
     }
 
-    /// Add immediate.
-    template <bool trace>
-    void execute_ADDI(const InstructionIType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto result = rs1 + instruction.imm;
-      TRACE_OP_IMM("ADDI", instruction, result);
-      state.writeReg(instruction.rd, result);
-    }
+    #define OP_IMM_ITYPE_INSTR(mnemonic, extract_immediate, expression) \
+      template <bool trace> \
+      void execute_##mnemonic (const InstructionIType &instruction) { \
+        auto rs1 = state.readReg(instruction.rs1); \
+        auto imm = extract_immediate; \
+        auto result = expression; \
+        state.writeReg(instruction.rd, result); \
+        TRACE("mnemonic", RegDest(instruction.rd), RegSrc(rs1), ImmValue(imm)); \
+        TRACE_REG_WRITE(instruction.rd, result); \
+        TRACE_END(); \
+      }
 
-    /// Set less than immediate.
-    template <bool trace>
-    void execute_SLTI(const InstructionIType &instruction) {
-      int32_t rs1 = state.readReg(instruction.rs1);
-      int32_t imm = signExtend(instruction.imm, 12);
-      auto result = rs1 < imm ? 1 : 0;
-      state.writeReg(instruction.rd, result);
-    }
+    OP_IMM_ITYPE_INSTR(ADDI, instruction.imm, rs1 + imm)
+    OP_IMM_ITYPE_INSTR(XORI, instruction.imm, rs1 ^ imm);
+    OP_IMM_ITYPE_INSTR(ORI,  instruction.imm, rs1 | imm);
+    OP_IMM_ITYPE_INSTR(ANDI, instruction.imm, rs1 & imm);
+    OP_IMM_ITYPE_INSTR(SLTI, signExtend(instruction.imm, 12), rs1 < imm ? 1 : 0);
+    OP_IMM_ITYPE_INSTR(SLTIU, instruction.imm, rs1 < imm ? 1 : 0);
 
-    /// Set less than immediate unsigned.
-    template <bool trace>
-    void execute_SLTIU(const InstructionIType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto result = rs1 < instruction.imm ? 1 : 0;
-      state.writeReg(instruction.rd, result);
-    }
+    #define OP_IMM_SHAMT_INSTR(mnemonic, expression) \
+      template <bool trace> \
+      void execute_##mnemonic (const InstructionIShamtType &instruction) { \
+        auto rs1 = state.readReg(instruction.rs1); \
+        auto result = expression; \
+        state.writeReg(instruction.rd, result); \
+        TRACE("mnemonic", RegDest(instruction.rd), RegSrc(rs1), ImmValue(instruction.shamt)); \
+        TRACE_REG_WRITE(instruction.rd, result); \
+        TRACE_END(); \
+      }
 
-    /// Bitwise XOR immediate.
-    template <bool trace>
-    void execute_XORI(const InstructionIType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto result = rs1 ^ instruction.imm;
-      state.writeReg(instruction.rd, result);
-    }
-
-    /// Bitwise OR immediate.
-    template <bool trace>
-    void execute_ORI(const InstructionIType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto result = rs1 | instruction.imm;
-      state.writeReg(instruction.rd, result);
-    }
-
-    /// Bitwise AND immediate.
-    template <bool trace>
-    void execute_ANDI(const InstructionIType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto result = rs1 & instruction.imm;
-      state.writeReg(instruction.rd, result);
-    }
-
-    /// Shift left logical immediate.
-    template <bool trace>
-    void execute_SLLI(const InstructionIShamtType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto result = rs1 << instruction.shamt;
-      state.writeReg(instruction.rd, result);
-    }
-
-    /// Shift right logical immediate.
-    template <bool trace>
-    void execute_SRLI(const InstructionIShamtType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto result = rs1 >> instruction.shamt;
-      state.writeReg(instruction.rd, result);
-    }
-
-    /// Shift right arithmetic immediate.
-    template <bool trace>
-    void execute_SRAI(const InstructionIShamtType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto result = rs1 >> instruction.shamt;
-      state.writeReg(instruction.rd, result);
-    }
+    OP_IMM_SHAMT_INSTR(SLLI, rs1 << instruction.shamt);
+    OP_IMM_SHAMT_INSTR(SRLI, rs1 >> instruction.shamt);
+    OP_IMM_SHAMT_INSTR(SRAI, static_cast<int32_t>(rs1) >> instruction.shamt);
 
     /// Add registers.
     template <bool trace>
@@ -699,6 +535,7 @@ public:
     void step() {
       auto fetchData = memory.readMemoryWord(state.pc);
       dispatchInstruction<trace>(fetchData);
+      state.cycleCount++;
     }
 };
 

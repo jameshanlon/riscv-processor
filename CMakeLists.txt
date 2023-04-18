@@ -24,7 +24,9 @@ add_compile_options(-Wall -pedantic)
 include_directories(${LIBELF_INCLUDE_DIRS})
 
 # Simulator executable
-add_executable(rvsim rvsim.cpp)
+add_executable(rvsim main.cpp
+                     HartState.cpp
+                     Trace.cpp)
 target_link_libraries(rvsim ${LIBELF_LIBRARIES})
 
 if (BUILD_GNU_TOOLCHAIN)

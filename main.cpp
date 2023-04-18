@@ -12,7 +12,10 @@
 #include "gelf.h"
 #include "libelf.h"
 
-#include "rvsim.hpp"
+#include "HartState.hpp"
+#include "Memory.hpp"
+#include "Executor.hpp"
+#include "Trace.hpp"
 
 #ifndef EM_RISCV
 #define EM_RISCV (243)
@@ -140,9 +143,9 @@ int main(int argc, const char *argv[]) {
       return 1;
     }
     // Instance the state and executor.
-    rvsim::RV32HartState state;
-    rvsim::RV32Memory memory;
-    rvsim::RV32Executor executor(state, memory);
+    rvsim::HartState state;
+    rvsim::Memory memory;
+    rvsim::Executor executor(state, memory);
     // Load the ELF file.
     std::map<std::string, uint32_t> symbolTable;
     loadELF(filename, symbolTable, memory.memory);
