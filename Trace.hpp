@@ -13,11 +13,13 @@ namespace rvsim {
 struct RegDst {
   Register reg;
   RegDst(Register reg) : reg(reg) {}
+  RegDst(unsigned reg) : reg(Register(reg)) {}
 };
 
 struct RegSrc {
   Register reg;
   RegSrc(Register reg) : reg(reg) {}
+  RegSrc(unsigned reg) : reg(Register(reg)) {}
 };
 
 struct ImmValue {
@@ -25,14 +27,21 @@ struct ImmValue {
   ImmValue(uint32_t value) : value(value) {}
 };
 
+struct ArgValue {
+  uint32_t value;
+  ArgValue(uint32_t value) : value(value) {}
+};
+
 struct RegWrite {
   Register reg;
   uint32_t value;
   RegWrite(Register reg, uint32_t value) : reg(reg), value(value) {}
+  RegWrite(unsigned reg, uint32_t value) : reg(Register(reg)), value(value) {}
 };
 
 class Trace {
   std::ostream &out;
+  const HartState *state;
   static Trace instance;
 
 public:
@@ -42,6 +51,7 @@ public:
   static Trace &get() { return instance; }
 
   void start(const HartState &state) {
+    this->state = &state;
     out << fmt::format("{:<8} {:<8} ", state.cycleCount, state.pc);
   }
 
@@ -58,11 +68,15 @@ public:
   }
 
   void printOperand(RegSrc &src) {
-    out << fmt::format("{} ", getRegisterName(src.reg));
+    out << fmt::format("{} ({:#x}) ", getRegisterName(src.reg), state->registers[src.reg]);
   }
 
   void printOperand(ImmValue &imm) {
     out << fmt::format("{} ", imm.value);
+  }
+
+  void printOperand(ArgValue &arg) {
+    out << fmt::format("{} ", arg.value);
   }
 
   void printOperand(RegWrite &write) {

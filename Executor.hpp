@@ -65,13 +65,6 @@ struct UnknownOpcodeException : public Exception {
     } \
   } while(0)
 
-#define TRACE_SYSCALL(name) \
-  do { \
-    if (trace) { \
-      Trace::get().syscall(name); \
-    } \
-  } while(0)
-
 #define TRACE_REG_WRITE(reg, value) \
   do { \
     if (trace) { \
@@ -108,21 +101,24 @@ public:
       auto ecallID = state.readReg(10);
       switch (ecallID) {
         case Ecall::EXIT: {
-          auto returnValue = state.readReg(11);
-          TRACE_SYSCALL("EXIT");
+          auto value = state.readReg(11);
+          TRACE("ECALL EXIT", ArgValue(value));
           TRACE_END();
-          throw ExitException(returnValue);
+          throw ExitException(value);
         }
-        case Ecall::GET_CHAR:
+        case Ecall::GET_CHAR: {
           // To do.
-          TRACE_SYSCALL("GET_CHAR");
+          TRACE("ECALL GET_CHAR");
           TRACE_END();
           break;
-        case Ecall::PUT_CHAR:
+        }
+        case Ecall::PUT_CHAR: {
           // To do.
-          TRACE_SYSCALL("PUT_CHAR");
+          auto value = state.readReg(11);
+          TRACE("ECALL PUT_CHAR", ArgValue(value));
           TRACE_END();
           break;
+        }
         default:
           throw UnknownEcallException(ecallID);
       }
