@@ -5,9 +5,11 @@ find_path(LIBELF_INCLUDE_DIRS
     libelf.h
   PATHS
     /usr/include
+    /usr/include/libelf
     /usr/local/include
+    /usr/local/include/libelf
     /opt/local/include
-    /sw/include
+    /opt/local/include/libelf
   ENV CPATH)
 
 # If libelf.h is found in a 'libelf/' directory, also include the parent level

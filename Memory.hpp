@@ -24,13 +24,13 @@ public:
     memory[address >> 2] = value;
   }
 
-  uint16_t readMemoryHalfWord(uint32_t address) {
+  uint16_t readMemoryHalf(uint32_t address) {
     unsigned shift = address & 0x2;
     assert(shift == (address & 0x3) && "misaligned half-word access");
     return extractBits(memory[address >> 2], 16 * shift, 16);
   }
 
-  void writeMemoryHalfWord(uint32_t address, uint16_t value) {
+  void writeMemoryHalf(uint32_t address, uint16_t value) {
     unsigned shift = address & 0x2;
     assert(shift == (address & 0x3) && "misaligned half-word access");
     auto existingValue = memory[address >> 2];

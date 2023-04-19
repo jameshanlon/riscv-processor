@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.14.0)
 project(riscv-simulator)
 include(GNUInstallDirs)
 include(ExternalProject)
+include(FetchContent)
 
 # Use local find scripts
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
@@ -21,13 +22,33 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 add_compile_options(-Wall -pedantic)
 
-include_directories(${LIBELF_INCLUDE_DIRS})
+# Third-party dependencies
+
+# fmt
+FetchContent_Declare(fmt
+  GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+  GIT_TAG 9.1.0
+  GIT_SHALLOW ON
+)
+FetchContent_MakeAvailable(fmt)
+
+if (fmt_FOUND)
+  message(STATUS "Fetched fmt library")
+endif()
+
+include_directories(include
+                    ${LIBELF_INCLUDE_DIRS})
 
 # Simulator executable
 add_executable(rvsim main.cpp
                      HartState.cpp
                      Trace.cpp)
-target_link_libraries(rvsim ${LIBELF_LIBRARIES})
+target_link_libraries(rvsim fmt::fmt
+                            ${LIBELF_LIBRARIES})
+
+# Tests
+enable_testing()
+add_subdirectory(tests)
 
 if (BUILD_GNU_TOOLCHAIN)
   ExternalProject_Add(riscv-gnu-toolchain

@@ -6,6 +6,8 @@
 
 namespace rvsim {
 
+const unsigned NUM_REGISTERS = 32;
+
 enum Register {
   x0,
   x1,
@@ -40,7 +42,6 @@ enum Register {
   x30,
   x31,
   pc,
-  NUM_REGISTERS
 };
 
 extern const char *registerNames[];

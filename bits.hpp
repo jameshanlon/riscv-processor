@@ -21,7 +21,7 @@ inline uint32_t extractBitRange(uint32_t value, unsigned high, unsigned low) {
 
 inline uint32_t insertBits(uint32_t destination, uint32_t source,
                            unsigned shift, unsigned size) {
-  assert(shift + size < 32 && "invalid shift");
+  assert(shift + size <= 32 && "invalid shift");
   uint32_t mask = (1U << size) - 1;
   return (destination & ~(mask << shift)) | ((source & mask) << shift);
 }

@@ -1,23 +1,22 @@
 #pragma once
 
 #include <cstdint>
-#include <format>
 #include <ostream>
 #include <iostream>
+
+#include <fmt/core.h>
 
 #include "HartState.hpp"
 
 namespace rvsim {
 
-struct RegDest {
+struct RegDst {
   Register reg;
-  RegDest(unsigned reg) : reg(Register(reg)) {}
-  RegDest(Register reg) : reg(reg) {}
+  RegDst(Register reg) : reg(reg) {}
 };
 
 struct RegSrc {
   Register reg;
-  RegSrc(unsigned reg) : reg(Register(reg)) {}
   RegSrc(Register reg) : reg(reg) {}
 };
 
@@ -30,7 +29,6 @@ struct RegWrite {
   Register reg;
   uint32_t value;
   RegWrite(Register reg, uint32_t value) : reg(reg), value(value) {}
-  RegWrite(unsigned reg, uint32_t value) : reg(Register(reg)), value(value) {}
 };
 
 class Trace {
@@ -43,8 +41,8 @@ public:
 
   static Trace &get() { return instance; }
 
-  void printStart(const HartState &state) {
-    //out << std::format("{} {}", state.cycleCount, state.pc);
+  void start(const HartState &state) {
+    out << fmt::format("{:<8} {:<8} ", state.cycleCount, state.pc);
   }
 
   void end() {
@@ -52,40 +50,53 @@ public:
   }
 
   void printOperand(const char *string) {
-    out << string << " ";
+    out << fmt::format("{} ", string);
   }
 
-  void printOperand(RegDest &reg) {
+  void printOperand(RegDst &dest) {
+    out << fmt::format("{} ", getRegisterName(dest.reg));
   }
 
-  void printOperand(RegSrc &reg) {
+  void printOperand(RegSrc &src) {
+    out << fmt::format("{} ", getRegisterName(src.reg));
   }
 
   void printOperand(ImmValue &imm) {
+    out << fmt::format("{} ", imm.value);
   }
 
-  void printOperand(RegWrite &reg) {
+  void printOperand(RegWrite &write) {
+    out << fmt::format("{} ({:#x}) ", getRegisterName(write.reg), write.value);
   }
 
-  void regWrite(RegDest reg, uint32_t value) {
+  void regWrite(RegDst dest, uint32_t value) {
+    out << fmt::format("{}={:#x} ", getRegisterName(dest.reg), value);
+  }
+
+  void memWrite(uint32_t address, uint32_t value) {
+    out << fmt::format("mem[{:#x}]={:#x} ", address, value);
+  }
+
+  void syscall(const char *string) {
+    out << fmt::format("{} ", string);
   }
 
   template <typename T0>
   void trace(HartState &state, T0 op0) {
-    printStart(state);
+    start(state);
     printOperand(op0);
   }
 
   template <typename T0, typename T1>
   void trace(const HartState &state, T0 op0, T1 op1) {
-    printStart(state);
+    start(state);
     printOperand(op0);
     printOperand(op1);
   }
 
   template <typename T0, typename T1, typename T2>
   void trace(const HartState &state, T0 op0, T1 op1, T2 op2) {
-    printStart(state);
+    start(state);
     printOperand(op0);
     printOperand(op1);
     printOperand(op2);
@@ -93,17 +104,12 @@ public:
 
   template <typename T0, typename T1, typename T2, typename T3>
   void trace(const HartState &state, T0 op0, T1 op1, T2 op2, T3 op3) {
-    printStart(state);
+    start(state);
     printOperand(op0);
     printOperand(op1);
     printOperand(op2);
     printOperand(op3);
   }
 };
-
-//out << std::format("{} {} {} {}", inst.rd, inst.rs1, inst.imm);
-//tracer.lineStart(); \
-//      std::cout << std::format("{} {} {} {}", name, inst.rd, inst.rs1, inst.imm);
-//      tracer.lineEnd();
 
 } // End namespace rvsim

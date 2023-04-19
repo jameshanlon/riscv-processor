@@ -65,10 +65,24 @@ struct UnknownOpcodeException : public Exception {
     } \
   } while(0)
 
+#define TRACE_SYSCALL(name) \
+  do { \
+    if (trace) { \
+      Trace::get().syscall(name); \
+    } \
+  } while(0)
+
 #define TRACE_REG_WRITE(reg, value) \
   do { \
     if (trace) { \
       Trace::get().regWrite(reg, value); \
+    } \
+  } while(0)
+
+#define TRACE_MEM_WRITE(reg, value) \
+  do { \
+    if (trace) { \
+      Trace::get().memWrite(reg, value); \
     } \
   } while(0)
 
@@ -79,6 +93,7 @@ struct UnknownOpcodeException : public Exception {
     } \
   } while(0)
 
+#define STR(s) #s
 
 class Executor {
 public:
@@ -88,18 +103,25 @@ public:
     Executor(HartState &state, Memory &memory)
         : state(state), memory(memory) {}
 
+    template<bool trace>
     void handleEcall() {
       auto ecallID = state.readReg(10);
       switch (ecallID) {
         case Ecall::EXIT: {
           auto returnValue = state.readReg(11);
+          TRACE_SYSCALL("EXIT");
+          TRACE_END();
           throw ExitException(returnValue);
         }
         case Ecall::GET_CHAR:
           // To do.
+          TRACE_SYSCALL("GET_CHAR");
+          TRACE_END();
           break;
         case Ecall::PUT_CHAR:
           // To do.
+          TRACE_SYSCALL("PUT_CHAR");
+          TRACE_END();
           break;
         default:
           throw UnknownEcallException(ecallID);
@@ -109,33 +131,34 @@ public:
     /// Load upper immediate.
     template <bool trace>
     void execute_LUI(const InstructionUType &instruction) {
-      auto result = insertBits(0, instruction.imm, 12, 20) | 0xFFF;
+      auto result = insertBits(0, instruction.imm, 20, 12) & ~0xFFF;
       state.writeReg(instruction.rd, result);
-      TRACE("LUI", RegDest(instruction.rd), ImmValue(instruction.imm));
-      TRACE_REG_WRITE(RegDest(instruction.rd), result);
+      TRACE("LUI", RegDst(instruction.rd), ImmValue(instruction.imm));
+      TRACE_REG_WRITE(instruction.rd, result);
       TRACE_END();
     }
 
     /// Add upper immediate to PC.
     template <bool trace>
     void execute_AUIPC(const InstructionUType &instruction) {
-      auto offset = insertBits(0, instruction.imm, 12, 20) | 0xFFF;
+      auto offset = insertBits(0, instruction.imm, 20, 12) & ~0xFFF;
       auto result = state.pc + offset;
       state.writeReg(instruction.rd, result);
-      TRACE("AUIPC", RegDest(instruction.rd), ImmValue(instruction.imm));
-      TRACE_REG_WRITE(RegDest(instruction.rd), result);
+      TRACE("AUIPC", RegDst(instruction.rd), ImmValue(instruction.imm));
+      TRACE_REG_WRITE(instruction.rd, result);
       TRACE_END();
     }
 
     /// Jump and link.
     template <bool trace>
     void execute_JAL(const InstructionJType &instruction) {
-      auto offset = signExtend(instruction.imm, 19) << 1;
+      auto imm = signExtend(instruction.imm, 19);
+      auto offset = imm << 1;
       auto result = state.pc + 4;
       state.writeReg(instruction.rd, result);
       state.pc += offset;
-      TRACE("JAL", RegDest(instruction.rd), ImmValue(instruction.imm));
-      TRACE_REG_WRITE(RegDest(instruction.rd), result);
+      TRACE("JAL", RegDst(instruction.rd), ImmValue(imm));
+      TRACE_REG_WRITE(instruction.rd, result);
       TRACE_REG_WRITE(Register::pc, state.pc);
       TRACE_END();
     }
@@ -144,10 +167,16 @@ public:
     template <bool trace>
     void execute_JALR(const InstructionIType &instruction) {
       auto base = instruction.rs1;
-      auto offset = signExtend(instruction.imm, 19) << 1;
+      auto imm = signExtend(instruction.imm, 19);
+      auto offset = imm << 1;
       auto targetPC = (base + offset) & 0xFFFFFFFE;
-      state.writeReg(instruction.rd, state.pc + 4);
+      auto result = state.pc + 4;
+      state.writeReg(instruction.rd, result);
       state.pc = targetPC;
+      TRACE("JALR", RegDst(instruction.rd), ImmValue(imm));
+      TRACE_REG_WRITE(instruction.rd, result);
+      TRACE_REG_WRITE(Register::pc, targetPC);
+      TRACE_END();
     }
 
     #define OP_IMM_ITYPE_INSTR(mnemonic, extract_immediate, expression) \
@@ -157,16 +186,16 @@ public:
         auto imm = extract_immediate; \
         auto result = expression; \
         state.writeReg(instruction.rd, result); \
-        TRACE("mnemonic", RegDest(instruction.rd), RegSrc(rs1), ImmValue(imm)); \
+        TRACE(STR(mnemonic), RegDst(instruction.rd), RegSrc(instruction.rs1), ImmValue(imm)); \
         TRACE_REG_WRITE(instruction.rd, result); \
         TRACE_END(); \
       }
 
-    OP_IMM_ITYPE_INSTR(ADDI, instruction.imm, rs1 + imm)
-    OP_IMM_ITYPE_INSTR(XORI, instruction.imm, rs1 ^ imm);
-    OP_IMM_ITYPE_INSTR(ORI,  instruction.imm, rs1 | imm);
-    OP_IMM_ITYPE_INSTR(ANDI, instruction.imm, rs1 & imm);
-    OP_IMM_ITYPE_INSTR(SLTI, signExtend(instruction.imm, 12), rs1 < imm ? 1 : 0);
+    OP_IMM_ITYPE_INSTR(ADDI,  instruction.imm, rs1 + imm)
+    OP_IMM_ITYPE_INSTR(XORI,  instruction.imm, rs1 ^ imm);
+    OP_IMM_ITYPE_INSTR(ORI,   instruction.imm, rs1 | imm);
+    OP_IMM_ITYPE_INSTR(ANDI,  instruction.imm, rs1 & imm);
+    OP_IMM_ITYPE_INSTR(SLTI,  signExtend(instruction.imm, 12), rs1 < imm ? 1 : 0);
     OP_IMM_ITYPE_INSTR(SLTIU, instruction.imm, rs1 < imm ? 1 : 0);
 
     #define OP_IMM_SHAMT_INSTR(mnemonic, expression) \
@@ -175,7 +204,7 @@ public:
         auto rs1 = state.readReg(instruction.rs1); \
         auto result = expression; \
         state.writeReg(instruction.rd, result); \
-        TRACE("mnemonic", RegDest(instruction.rd), RegSrc(rs1), ImmValue(instruction.shamt)); \
+        TRACE(STR(mnemonic), RegDst(instruction.rd), RegSrc(instruction.rs1), ImmValue(instruction.shamt)); \
         TRACE_REG_WRITE(instruction.rd, result); \
         TRACE_END(); \
       }
@@ -184,233 +213,90 @@ public:
     OP_IMM_SHAMT_INSTR(SRLI, rs1 >> instruction.shamt);
     OP_IMM_SHAMT_INSTR(SRAI, static_cast<int32_t>(rs1) >> instruction.shamt);
 
-    /// Add registers.
-    template <bool trace>
-    void execute_ADD(const InstructionRType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto rs2 = state.readReg(instruction.rs2);
-      auto result = rs1 + rs2;
-      state.writeReg(instruction.rd, result);
-    }
-
-    /// Subtract registers.
-    template <bool trace>
-    void execute_SUB(const InstructionRType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto rs2 = state.readReg(instruction.rs2);
-      auto result = rs1 - rs2;
-      state.writeReg(instruction.rd, result);
-    }
-
-    /// Shift left logical.
-    template <bool trace>
-    void execute_SLL(const InstructionRType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto rs2 = state.readReg(instruction.rs2);
-      auto result = rs1 - rs2;
-      state.writeReg(instruction.rd, result);
-    }
-
-    /// Signed less than.
-    template <bool trace>
-    void execute_SLT(const InstructionRType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto rs2 = state.readReg(instruction.rs2);
-      uint32_t result = rs1 < rs2 ? 1U : 0U;
-      state.writeReg(instruction.rd, result);
-    }
-
-    /// Set less than unsigned.
-    template <bool trace>
-    void execute_SLTU(const InstructionRType &instruction) {
-      int32_t rs1 = state.readReg(instruction.rs1);
-      int32_t rs2 = state.readReg(instruction.rs2);
-      uint32_t result = rs1 < rs2 ? 1U : 0U;
-      state.writeReg(instruction.rd, result);
-    }
-
-    /// XOR.
-    template <bool trace>
-    void execute_XOR(const InstructionRType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto rs2 = state.readReg(instruction.rs2);
-      auto result = rs1 ^ rs2;
-      state.writeReg(instruction.rd, result);
-    }
-
-    /// Shift right logical.
-    template <bool trace>
-    void execute_SRL(const InstructionRType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto rs2 = state.readReg(instruction.rs2);
-      auto result = rs1 >> rs2;
-      state.writeReg(instruction.rd, result);
-    }
-
-    /// Shift right arithmetic.
-    template <bool trace>
-    void execute_SRA(const InstructionRType &instruction) {
-      int32_t rs1 = state.readReg(instruction.rs1);
-      int32_t rs2 = state.readReg(instruction.rs2);
-      auto result = rs1 >> rs2;
-      state.writeReg(instruction.rd, result);
-    }
-
-    /// OR registers.
-    template <bool trace>
-    void execute_OR(const InstructionRType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto rs2 = state.readReg(instruction.rs2);
-      auto result = rs1 | rs2;
-      state.writeReg(instruction.rd, result);
-    }
-
-    /// AND registers.
-    template <bool trace>
-    void execute_AND(const InstructionRType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto rs2 = state.readReg(instruction.rs2);
-      auto result = rs1 & rs2;
-      state.writeReg(instruction.rd, result);
-    }
-
-    inline uint32_t effectiveAddress(const InstructionSType &instruction) {
-      auto offset = signExtend(instruction.imm, 12);
-      auto base = instruction.rs1;
-      return base + offset;
-    }
-
-    inline uint32_t effectiveAddress(const InstructionIType &instruction) {
-      auto offset = signExtend(instruction.imm, 12);
-      auto base = instruction.rs1;
-      return base + offset;
-    }
-
-    /// Store byte.
-    template <bool trace>
-    void execute_SB(const InstructionSType &instruction) {
-      memory.writeMemoryByte(effectiveAddress(instruction), instruction.rs2);
-    }
-
-    /// Store half.
-    template <bool trace>
-    void execute_SH(const InstructionSType &instruction) {
-      memory.writeMemoryHalfWord(effectiveAddress(instruction),
-                                 instruction.rs2);
-    }
-
-    /// Store word.
-    template <bool trace>
-    void execute_SW(const InstructionSType &instruction) {
-      memory.writeMemoryHalfWord(effectiveAddress(instruction),
-                                 instruction.rs2);
-    }
-
-    /// Load byte (sign extend).
-    template <bool trace>
-    void execute_LB(const InstructionIType &instruction) {
-      auto result = memory.readMemoryByte(effectiveAddress(instruction));
-      state.writeReg(instruction.rd, signExtend(result, 8));
-    }
-
-    /// Load half (sign extend).
-    template <bool trace>
-    void execute_LH(const InstructionIType &instruction) {
-      auto result = memory.readMemoryHalfWord(effectiveAddress(instruction));
-      state.writeReg(instruction.rd, signExtend(result, 16));
-    }
-
-    /// Load word.
-    template <bool trace>
-    void execute_LW(const InstructionIType &instruction) {
-      auto result = memory.readMemoryHalfWord(effectiveAddress(instruction));
-      state.writeReg(instruction.rd, result);
-    }
-
-    /// Load byte (zero extend).
-    template <bool trace>
-    void execute_LBU(const InstructionIType &instruction) {
-      auto result = memory.readMemoryByte(effectiveAddress(instruction));
-      state.writeReg(instruction.rd, result);
-    }
-
-    /// Load half (zero extend).
-    template <bool trace>
-    void execute_LHU(const InstructionIType &instruction) {
-      auto result = memory.readMemoryHalfWord(effectiveAddress(instruction));
-      state.writeReg(instruction.rd, result);
-    }
-
-    /// Branch if equal.
-    template <bool trace>
-    void execute_BEQ(const InstructionSType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto rs2 = state.readReg(instruction.rs2);
-      if (rs1 == rs2) {
-        int32_t offset = signExtend(instruction.imm, 12);
-        state.pc += offset;
+    #define OP_REG_RTYPE_INSTR(mnemonic, expression) \
+      template <bool trace> \
+      void execute_##mnemonic(const InstructionRType &instruction) { \
+        auto rs1 = state.readReg(instruction.rs1); \
+        auto rs2 = state.readReg(instruction.rs2); \
+        auto result = expression; \
+        state.writeReg(instruction.rd, result); \
+        TRACE(STR(mnemonic), RegDst(instruction.rd), RegSrc(instruction.rs1), RegSrc(instruction.rs2)); \
+        TRACE_REG_WRITE(RegDst(instruction.rd), result); \
+        TRACE_END(); \
       }
-    }
 
-    /// Branch if not equal.
-    template <bool trace>
-    void execute_BNE(const InstructionSType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto rs2 = state.readReg(instruction.rs2);
-      if (rs1 != rs2) {
-        int32_t offset = signExtend(instruction.imm, 12);
-        state.pc += offset;
-      }
-    }
+    OP_REG_RTYPE_INSTR(ADD,  rs1 + rs2);
+    OP_REG_RTYPE_INSTR(SUB,  rs1 - rs2);
+    OP_REG_RTYPE_INSTR(SLL,  rs1 << rs2);
+    OP_REG_RTYPE_INSTR(SRL,  rs1 >> rs2);
+    OP_REG_RTYPE_INSTR(SRA,  static_cast<int32_t>(rs1) >> rs2);
+    OP_REG_RTYPE_INSTR(OR,   rs1 | rs2);
+    OP_REG_RTYPE_INSTR(AND,  rs1 & rs2);
+    OP_REG_RTYPE_INSTR(XOR,  rs1 ^ rs2);
+    OP_REG_RTYPE_INSTR(SLT,  static_cast<int32_t>(rs1) < static_cast<uint32_t>(rs2) ? 1 : 0);
+    OP_REG_RTYPE_INSTR(SLTU, rs1 < rs2 ? 1 : 0);
 
-    /// Branch if less than (signed).
-    template <bool trace>
-    void execute_BLT(const InstructionSType &instruction) {
-      int32_t rs1 = state.readReg(instruction.rs1);
-      int32_t rs2 = state.readReg(instruction.rs2);
-      if (rs1 < rs2) {
-        int32_t offset = signExtend(instruction.imm, 12);
-        state.pc += offset;
+    #define BRANCH_STYPE_INSTR(mnemonic, expression) \
+      template <bool trace> \
+      void execute_##mnemonic(const InstructionSType &instruction) { \
+        auto rs1 = state.readReg(instruction.rs1); \
+        auto rs2 = state.readReg(instruction.rs2); \
+        int32_t offset = signExtend(instruction.imm, 12); \
+        TRACE(STR(mnemonic), RegSrc(instruction.rs1), RegSrc(instruction.rs2), ImmValue(offset)); \
+        if (expression) { \
+          state.pc += offset; \
+          TRACE_REG_WRITE(Register::pc, state.pc); \
+        } \
+        TRACE_END(); \
       }
-    }
 
-    /// Branch if greater than or equal.
-    template <bool trace>
-    void execute_BGE(const InstructionSType &instruction) {
-      int32_t rs1 = state.readReg(instruction.rs1);
-      int32_t rs2 = state.readReg(instruction.rs2);
-      if (rs1 >= rs2) {
-        int32_t offset = signExtend(instruction.imm, 12);
-        state.pc += offset;
-      }
-    }
+    BRANCH_STYPE_INSTR(BEQ,  rs1 == rs2);
+    BRANCH_STYPE_INSTR(BNE,  rs1 != rs2);
+    BRANCH_STYPE_INSTR(BLT,  static_cast<int32_t>(rs1) < static_cast<int32_t>(rs2));
+    BRANCH_STYPE_INSTR(BGE,  static_cast<int32_t>(rs1) >= static_cast<int32_t>(rs2));
+    BRANCH_STYPE_INSTR(BLTU, rs1 < rs2);
+    BRANCH_STYPE_INSTR(BGEU, rs1 >= rs2);
 
-    /// Branch if less than (unsigned).
-    template <bool trace>
-    void execute_BLTU(const InstructionSType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto rs2 = state.readReg(instruction.rs2);
-      if (rs1 < rs2) {
-        int32_t offset = signExtend(instruction.imm, 12);
-        state.pc += offset;
+    #define STORE_STYPE_INSTR(mnemonic, memory_function) \
+      template <bool trace> \
+      void execute_##mnemonic(const InstructionSType &instruction) { \
+        auto base = instruction.rs1; \
+        auto offset = signExtend(instruction.imm, 12); \
+        auto effectiveAddr = base + offset; \
+        memory.memory_function(effectiveAddr, instruction.rs2); \
+        TRACE(STR(mnemonic), RegSrc(instruction.rs2), RegSrc(base), ImmValue(offset)); \
+        TRACE_MEM_WRITE(effectiveAddr, instruction.rs2); \
+        TRACE_END(); \
       }
-    }
 
-    /// Branch if greater than or equal (unsigned).
-    template <bool trace>
-    void execute_BGEU(const InstructionSType &instruction) {
-      auto rs1 = state.readReg(instruction.rs1);
-      auto rs2 = state.readReg(instruction.rs2);
-      if (rs1 >= rs2) {
-        int32_t offset = signExtend(instruction.imm, 12);
-        state.pc += offset;
+    STORE_STYPE_INSTR(SB, writeMemoryByte);
+    STORE_STYPE_INSTR(SH, writeMemoryHalf);
+    STORE_STYPE_INSTR(SW, writeMemoryWord);
+
+    #define LOAD_ITYPE_INSTR(mnemonic, memory_function, result_expression) \
+      template <bool trace> \
+      void execute_##mnemonic(const InstructionIType &instruction) { \
+        auto base = instruction.rs1; \
+        auto offset = signExtend(instruction.imm, 12); \
+        auto effectiveAddr = base + offset; \
+        auto result = memory.memory_function(effectiveAddr); \
+        result = result_expression; \
+        state.writeReg(instruction.rd, result); \
+        TRACE(STR(mnemonic), RegDst(instruction.rd), RegSrc(base), ImmValue(offset)); \
+        TRACE_REG_WRITE(instruction.rd, result); \
+        TRACE_END(); \
       }
-    }
+
+    LOAD_ITYPE_INSTR(LB,  readMemoryByte, signExtend(result, 8));
+    LOAD_ITYPE_INSTR(LH,  readMemoryHalf, signExtend(result, 16));
+    LOAD_ITYPE_INSTR(LW,  readMemoryWord, result);
+    LOAD_ITYPE_INSTR(LBU, readMemoryByte, result);
+    LOAD_ITYPE_INSTR(LHU, readMemoryHalf, result);
 
     /// Environment call.
     template <bool trace>
     void execute_ECALL(const InstructionIType &instruction) {
-      handleEcall();
+      handleEcall<trace>();
     }
 
     /// Environment break.

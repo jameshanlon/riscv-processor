@@ -1,5 +1,7 @@
 #include "HartState.hpp"
 
+namespace rvsim {
+
 const char *registerNames[] = {
   "x0",
   "x1",
@@ -35,3 +37,5 @@ const char *registerNames[] = {
   "x31",
   "pc"
 };
+
+} // End namespace rvsim

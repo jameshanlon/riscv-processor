@@ -150,19 +150,18 @@ int main(int argc, const char *argv[]) {
     std::map<std::string, uint32_t> symbolTable;
     loadELF(filename, symbolTable, memory.memory);
     // Step the model.
-    size_t cycles = 0;
     while (true) {
       if (trace) {
         executor.step<true>();
       } else {
         executor.step<false>();
       }
-      if (cycles == maxCycles) {
+      if (maxCycles > 0 && state.cycleCount == maxCycles) {
         break;
       }
-      cycles++;
+      state.pc += 4;
+      state.cycleCount++;
     }
-    std::cout << std::to_string(cycles) << " cycles\n";
   } catch (rvsim::ExitException &e) {
     return e.returnValue;
   } catch (rvsim::UnknownOpcodeException &e) {
