@@ -45,11 +45,15 @@ struct InstructionSType : public InstructionFormat {
   Register rs1, rs2;
   unsigned imm, funct;
   InstructionSType(uint32_t value) :
-    rs1(Register(extractBitRange(value, 19, 15))),
-    rs2(Register(extractBitRange(value, 24, 20))),
-    imm(insertBits(extractBitRange(value, 11, 7),
-                   extractBitRange(value, 31, 25), 5, 7)),
-    funct(extractBitRange(value, 14, 12)) {}
+      rs1(Register(extractBitRange(value, 19, 15))),
+      rs2(Register(extractBitRange(value, 24, 20))),
+      imm(0U),
+      funct(extractBitRange(value, 14, 12)) {
+    imm = insertBits(imm, extractBit(value, 7), 11, 1);
+    imm = insertBits(imm, extractBitRange(value, 11, 8), 1, 4);
+    imm = insertBits(imm, extractBitRange(value, 30, 25), 5, 6);
+    imm = insertBits(imm, extractBit(value, 31), 12, 1);
+  }
 };
 
 struct InstructionUType : public InstructionFormat {

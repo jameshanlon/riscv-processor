@@ -240,10 +240,11 @@ public:
         auto rs1 = state.readReg(instruction.rs1); \
         auto rs2 = state.readReg(instruction.rs2); \
         int32_t imm = signExtend(instruction.imm, 12); \
-        int32_t offset = imm << 1; \
+        int32_t offset = imm; \
         TRACE(STR(mnemonic), RegSrc(instruction.rs1), RegSrc(instruction.rs2), ImmValue(imm)); \
         if (expression) { \
           state.pc += offset; \
+          state.branchTaken = true; \
           TRACE_REG_WRITE(Register::pc, state.pc); \
         } \
         TRACE_END(); \
@@ -420,6 +421,11 @@ public:
     void step() {
       auto fetchData = memory.readMemoryWord(state.pc);
       dispatchInstruction<trace>(fetchData);
+      if (!state.branchTaken) {
+        state.pc += 4;
+      } else {
+        state.branchTaken = false;
+      }
       state.cycleCount++;
     }
 };

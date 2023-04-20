@@ -6,6 +6,7 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <vector>
 
@@ -41,7 +42,7 @@ static void help(const char *argv[]) {
 void loadELF(const char *filename, std::map<std::string, uint32_t> &symbolTable,
              std::array<uint32_t, rvsim::MEMORY_SIZE_WORDS> &memory) {
 
-  uint32_t startAddr;
+  uint32_t baseAddr = std::numeric_limits<uint32_t>::max();
 
   // Load the binary file.
   std::streampos fileSize;
@@ -63,12 +64,46 @@ void loadELF(const char *filename, std::map<std::string, uint32_t> &symbolTable,
   elf_version(EV_CURRENT);
   Elf *elf = elf_memory(reinterpret_cast<char *>(ELFcontents.data()), fileSize);
 
-  // Check header information.
+  // Obtain ELF header.
   Elf32_Ehdr *header = elf32_getehdr(elf);
-  if (!(header->e_type == ET_EXEC && header->e_ident[EI_CLASS] == ELFCLASS32 &&
-        header->e_ident[EI_DATA] == ELFDATA2LSB &&
-        header->e_machine == EM_RISCV)) {
+  if (header == nullptr) {
+    throw std::runtime_error("elf32_getehdr() failed");
+  }
+
+  // Check ELF header information.
+  if (!(header->e_ident[EI_MAG0] == 0x7F &&
+        header->e_ident[EI_MAG1] == 'E' &&
+        header->e_ident[EI_MAG2] == 'L' &&
+        header->e_ident[EI_MAG3] == 'F' &&
+        header->e_ident[EI_CLASS] == ELFCLASS32 && // 32 bit
+        header->e_ident[EI_DATA] == ELFDATA2LSB && // Little endian
+        header->e_type == ET_EXEC && // Executable file
+        header->e_machine == EM_RISCV &&
+        header->e_version == 1)) {
     throw std::runtime_error("Unexpected ELF header");
+  }
+
+  // Get the number of program headers.
+  size_t numProgramHeaders;
+  if (elf_getphdrnum(elf, &numProgramHeaders) != 0) {
+    throw std::runtime_error("elf_getphdrnum() failed");
+  }
+
+  // Retrieve the base memory address from the the program header.
+  for (size_t i = 0; i < numProgramHeaders; i++) {
+    GElf_Phdr programHeader;
+    if (gelf_getphdr(elf, i, &programHeader) == NULL) {
+      throw std::runtime_error("gelf_getphdr() failed");
+    }
+    if (programHeader.p_type == PT_LOAD) {
+      baseAddr = programHeader.p_paddr;
+      std::cout << fmt::format("Base address={:X}\n", baseAddr);
+    }
+  }
+
+  // Check the base address is as expected..
+  if (baseAddr != rvsim::MEMORY_BASE_ADDRESS) {
+    throw std::runtime_error(fmt::format("unexpected base address: {:#x}", baseAddr));
   }
 
   Elf_Scn *section = nullptr;
@@ -86,10 +121,6 @@ void loadELF(const char *filename, std::map<std::string, uint32_t> &symbolTable,
         const char *name =
             elf_strptr(elf, sectionHeader.sh_link, symbol.st_name);
         symbolTable[name] = symbol.st_value;
-        // Record the start address.
-        if (std::strcmp(name, "_start") == 0) {
-          startAddr = symbol.st_value;
-        }
       }
     }
   }
@@ -99,15 +130,10 @@ void loadELF(const char *filename, std::map<std::string, uint32_t> &symbolTable,
     gelf_getshdr(section, &sectionHeader);
     if (sectionHeader.sh_type == SHT_PROGBITS) {
       Elf_Data *data = elf_getdata(section, nullptr);
-      if (sectionHeader.sh_addr >= startAddr) {
-        std::memcpy(reinterpret_cast<char *>(memory.data()) +
-                        sectionHeader.sh_addr - startAddr,
-                    data->d_buf, sectionHeader.sh_size);
-        std::cout << "Loaded " << sectionHeader.sh_size
-                  << " bytes into memory\n";
-      } else {
-        // Skip.
-      }
+      std::memcpy(reinterpret_cast<char *>(memory.data()) +
+                      sectionHeader.sh_addr - baseAddr,
+                  data->d_buf, sectionHeader.sh_size);
+      std::cout << fmt::format("Loaded {} bytes into memory\n", sectionHeader.sh_size);
     }
   }
 }
@@ -149,6 +175,7 @@ int main(int argc, const char *argv[]) {
     // Load the ELF file.
     std::map<std::string, uint32_t> symbolTable;
     loadELF(filename, symbolTable, memory.memory);
+    state.pc = symbolTable["_start"] - rvsim::MEMORY_BASE_ADDRESS;
     // Step the model.
     while (true) {
       if (trace) {
@@ -156,15 +183,9 @@ int main(int argc, const char *argv[]) {
       } else {
         executor.step<false>();
       }
-      if (!state.branchTaken) {
-        state.pc += 4;
-      } else {
-        state.branchTaken = false;
-      }
       if (maxCycles > 0 && state.cycleCount == maxCycles) {
         break;
       }
-      state.cycleCount++;
     }
   } catch (rvsim::ExitException &e) {
     return e.returnValue;

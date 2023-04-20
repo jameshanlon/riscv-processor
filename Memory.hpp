@@ -8,7 +8,9 @@
 
 namespace rvsim {
 
-static const size_t MEMORY_SIZE_WORDS = 1 << 20;
+static const size_t MEMORY_BASE_ADDRESS = 0x10000;
+static const size_t MEMORY_SIZE_BYTES   = 0x10000; // 1 KB
+static const size_t MEMORY_SIZE_WORDS = MEMORY_SIZE_BYTES >> 2;
 
 class Memory {
 public:

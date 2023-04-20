@@ -7,6 +7,7 @@
 #include <fmt/core.h>
 
 #include "HartState.hpp"
+#include "Memory.hpp"
 
 namespace rvsim {
 
@@ -52,7 +53,8 @@ public:
 
   void start(const HartState &state) {
     this->state = &state;
-    out << fmt::format("{:<8} {:<8X} ", state.cycleCount, state.pc);
+    auto logicalPC = state.pc + MEMORY_BASE_ADDRESS;
+    out << fmt::format("{:<8} 0x{:<8X} ", state.cycleCount, logicalPC);
   }
 
   void end() {
