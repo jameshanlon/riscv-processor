@@ -47,7 +47,7 @@ enum Register {
 extern const char *registerNames[];
 
 inline const char *getRegisterName(unsigned index) {
-  if (index < NUM_REGISTERS) {
+  if (index < NUM_REGISTERS + 1) {
     return registerNames[index];
   } else {
     assert(0 && "Unexpected register");

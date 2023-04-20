@@ -148,7 +148,7 @@ public:
     /// Jump and link.
     template <bool trace>
     void execute_JAL(const InstructionJType &instruction) {
-      auto imm = signExtend(instruction.imm, 19);
+      auto imm = signExtend(instruction.imm, 20);
       auto offset = imm << 1;
       auto result = state.pc + 4;
       state.writeReg(instruction.rd, result);
@@ -237,8 +237,9 @@ public:
       void execute_##mnemonic(const InstructionSType &instruction) { \
         auto rs1 = state.readReg(instruction.rs1); \
         auto rs2 = state.readReg(instruction.rs2); \
-        int32_t offset = signExtend(instruction.imm, 12); \
-        TRACE(STR(mnemonic), RegSrc(instruction.rs1), RegSrc(instruction.rs2), ImmValue(offset)); \
+        int32_t imm = signExtend(instruction.imm, 12); \
+        int32_t offset = imm << 1; \
+        TRACE(STR(mnemonic), RegSrc(instruction.rs1), RegSrc(instruction.rs2), ImmValue(imm)); \
         if (expression) { \
           state.pc += offset; \
           TRACE_REG_WRITE(Register::pc, state.pc); \

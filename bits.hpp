@@ -27,8 +27,7 @@ inline uint32_t insertBits(uint32_t destination, uint32_t source,
 }
 
 inline uint32_t signExtend(uint32_t value, unsigned size) {
-  // http://graphics.stanford.edu/~seander/bithacks.html#FixedSignExtend
   assert(size < 32 && "invalid size");
-  uint32_t mask = 1U << (size - 1);
-  return (value ^ mask) - mask;
+  uint32_t mask = (1U << size) - 1;
+  return ((value >> size) & 1) ? value | mask : value;
 }

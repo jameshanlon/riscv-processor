@@ -65,7 +65,14 @@ struct InstructionJType : public InstructionFormat {
   unsigned imm;
   InstructionJType(uint32_t value) :
     rd(Register(extractBitRange(value, 11, 7))),
-    imm(extractBitRange(value, 31, 12)) {}
+    imm(insertBits(
+          insertBits(
+            insertBits(
+              insertBits(0U,
+                         extractBit(value, 31), 20, 1),
+              extractBitRange(value, 19, 12), 12, 8),
+            extractBit(value, 20), 11, 1),
+          extractBitRange(value, 30, 21), 10, 1)) {}
 };
 
 }; // End namespace rvsim.
