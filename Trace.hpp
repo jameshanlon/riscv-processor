@@ -52,7 +52,7 @@ public:
 
   void start(const HartState &state) {
     this->state = &state;
-    out << fmt::format("{:<8} {:<8} ", state.cycleCount, state.pc);
+    out << fmt::format("{:<8} {:<8X} ", state.cycleCount, state.pc);
   }
 
   void end() {

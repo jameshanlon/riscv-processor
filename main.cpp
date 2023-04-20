@@ -156,10 +156,14 @@ int main(int argc, const char *argv[]) {
       } else {
         executor.step<false>();
       }
+      if (!state.branchTaken) {
+        state.pc += 4;
+      } else {
+        state.branchTaken = false;
+      }
       if (maxCycles > 0 && state.cycleCount == maxCycles) {
         break;
       }
-      state.pc += 4;
       state.cycleCount++;
     }
   } catch (rvsim::ExitException &e) {

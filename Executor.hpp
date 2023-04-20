@@ -149,11 +149,12 @@ public:
     template <bool trace>
     void execute_JAL(const InstructionJType &instruction) {
       auto imm = signExtend(instruction.imm, 20);
-      auto offset = imm << 1;
+      auto offset = imm;
       auto result = state.pc + 4;
       state.writeReg(instruction.rd, result);
       state.pc += offset;
-      TRACE("JAL", RegDst(instruction.rd), ImmValue(imm));
+      state.branchTaken = true;
+      TRACE("JAL", RegDst(instruction.rd), ImmValue(instruction.imm));
       TRACE_REG_WRITE(instruction.rd, result);
       TRACE_REG_WRITE(Register::pc, state.pc);
       TRACE_END();
@@ -165,10 +166,11 @@ public:
       auto base = instruction.rs1;
       auto imm = signExtend(instruction.imm, 19);
       auto offset = imm << 1;
-      auto targetPC = (base + offset) & 0xFFFFFFFE;
+      auto targetPC = (base + offset) & ~1U;
       auto result = state.pc + 4;
       state.writeReg(instruction.rd, result);
       state.pc = targetPC;
+      state.branchTaken = true;
       TRACE("JALR", RegDst(instruction.rd), ImmValue(imm));
       TRACE_REG_WRITE(instruction.rd, result);
       TRACE_REG_WRITE(Register::pc, targetPC);

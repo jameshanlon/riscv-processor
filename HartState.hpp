@@ -58,9 +58,11 @@ class HartState {
 public:
   std::array<uint32_t, NUM_REGISTERS> registers;
   uint32_t pc;
+  // Non-architectural.
   uint64_t cycleCount;
+  bool branchTaken;
 
-  HartState() : pc(0) {}
+  HartState() : pc(0), cycleCount(0), branchTaken(false) {}
 
   /// Read a GP register, with special handling for x0.
   uint32_t readReg(size_t index) {
