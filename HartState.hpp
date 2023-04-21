@@ -4,6 +4,8 @@
 #include <cassert>
 #include <cstdint>
 
+#include "SymbolInfo.hpp"
+
 namespace rvsim {
 
 const unsigned NUM_REGISTERS = 32;
@@ -59,10 +61,12 @@ public:
   std::array<uint32_t, NUM_REGISTERS> registers;
   uint32_t pc;
   // Non-architectural.
+  SymbolInfo &symbolInfo;
   uint64_t cycleCount;
   bool branchTaken;
 
-  HartState() : pc(0), cycleCount(0), branchTaken(false) {}
+  HartState(SymbolInfo &symbolInfo)
+    : pc(0), symbolInfo(symbolInfo), cycleCount(0), branchTaken(false) {}
 
   /// Read a GP register, with special handling for x0.
   uint32_t readReg(size_t index) {

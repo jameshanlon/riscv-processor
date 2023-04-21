@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "SymbolInfo.hpp"
 #include "gelf.h"
 #include "libelf.h"
 #include <fmt/core.h>
@@ -40,8 +41,7 @@ static void help(const char *argv[]) {
                "(default: 0)\n";
 }
 
-void loadELF(const char *filename, std::map<std::string, uint32_t> &symbolTable,
-             std::array<uint32_t, rvsim::MEMORY_SIZE_WORDS> &memory) {
+void loadELF(const char *filename, rvsim::SymbolInfo &symbolInfo, rvsim::Memory &memory) {
 
   // Load the binary file.
   std::streampos fileSize;
@@ -128,21 +128,27 @@ void loadELF(const char *filename, std::map<std::string, uint32_t> &symbolTable,
     }
   }
 
+  // Find the symbol table.
   Elf_Scn *section = nullptr;
   GElf_Shdr sectionHeader;
-
-  // Find the symbols and populate the symbol table.
   while ((section = elf_nextscn(elf, section)) != nullptr) {
     gelf_getshdr(section, &sectionHeader);
     if (sectionHeader.sh_type == SHT_SYMTAB) {
-      Elf_Data *data = elf_getdata(section, nullptr);
-      size_t count = sectionHeader.sh_size / sectionHeader.sh_entsize;
-      for (size_t i = 0; i < count; i++) {
-        GElf_Sym symbol;
-        gelf_getsym(data, i, &symbol);
-        const char *name = elf_strptr(elf, sectionHeader.sh_link, symbol.st_name);
-        symbolTable[name] = symbol.st_value;
-      }
+      break;
+    }
+  }
+
+  // Read the symbol data.
+  Elf_Data *data = elf_getdata(section, nullptr);
+  if (data == nullptr) {
+    std::cout << "No ELF symbol data\n";
+  } else {
+    size_t count = sectionHeader.sh_size / sectionHeader.sh_entsize;
+    for (size_t i = 0; i < count; i++) {
+      GElf_Sym symbol;
+      gelf_getsym(data, i, &symbol);
+      const char *name = elf_strptr(elf, sectionHeader.sh_link, symbol.st_name);
+      symbolInfo.addSymbol(name, symbol.st_value, symbol.st_info);
     }
   }
 
@@ -180,13 +186,13 @@ int main(int argc, const char *argv[]) {
       return 1;
     }
     // Instance the state and executor.
-    rvsim::HartState state;
+    rvsim::SymbolInfo symbolInfo;
+    rvsim::HartState state(symbolInfo);
     rvsim::Memory memory;
     rvsim::Executor executor(state, memory);
     // Load the ELF file.
-    std::map<std::string, uint32_t> symbolTable;
-    loadELF(filename, symbolTable, memory.memory);
-    state.pc = symbolTable["_start"] - rvsim::MEMORY_BASE_ADDRESS;
+    loadELF(filename, symbolInfo, memory);
+    state.pc = symbolInfo.getSymbol("_start")->value - rvsim::MEMORY_BASE_ADDRESS;
     // Step the model.
     while (true) {
       if (trace) {
