@@ -8,11 +8,14 @@
 #include <iostream>
 #include <limits>
 #include <map>
+#include <stdexcept>
 #include <vector>
 
 #include "gelf.h"
 #include "libelf.h"
+#include <fmt/core.h>
 
+#include "bits.hpp"
 #include "HartState.hpp"
 #include "Memory.hpp"
 #include "Executor.hpp"
@@ -37,12 +40,8 @@ static void help(const char *argv[]) {
                "(default: 0)\n";
 }
 
-// https://github.com/riscv-software-src/riscv-isa-sim/blob/eb75ab37a17ff4f8597b7b40283a08c38d2a6ff6/fesvr/memif.h#L33
-// https://gist.github.com/FrankBuss/c974e59826d33e21d7cad54491ab50e8
 void loadELF(const char *filename, std::map<std::string, uint32_t> &symbolTable,
              std::array<uint32_t, rvsim::MEMORY_SIZE_WORDS> &memory) {
-
-  uint32_t baseAddr = std::numeric_limits<uint32_t>::max();
 
   // Load the binary file.
   std::streampos fileSize;
@@ -54,56 +53,79 @@ void loadELF(const char *filename, std::map<std::string, uint32_t> &symbolTable,
   file.seekg(0, std::ios::beg);
 
   // Round up to nearest multiple of 4 bytes.
-  size_t vectorSize = (static_cast<unsigned>(fileSize) + 3U) & ~3U;
+  size_t vectorSize = roundUpToMultipleOf4(fileSize);
 
   // Read the instructions into memory.
-  std::vector<uint32_t> ELFcontents(vectorSize);
-  file.read(reinterpret_cast<char *>(ELFcontents.data()), fileSize);
+  std::vector<uint32_t> elfContents(vectorSize);
+  auto elfContentsPtr = reinterpret_cast<char*>(elfContents.data());
+  file.read(elfContentsPtr, fileSize);
+
+  // Initialise the library.
+  if (elf_version(EV_CURRENT) == EV_NONE) {
+    throw std::runtime_error(fmt::format("ELF library initialisation failed: {}", elf_errmsg(-1)));
+  }
 
   // Create an ELF data structure.
-  elf_version(EV_CURRENT);
-  Elf *elf = elf_memory(reinterpret_cast<char *>(ELFcontents.data()), fileSize);
+  Elf *elf = elf_memory(elfContentsPtr, fileSize);
+  if (elf == nullptr) {
+    throw std::runtime_error(fmt::format("reading ELF file data: ", elf_errmsg(-1)));
+  }
+  if (elf_kind(elf) != ELF_K_ELF) {
+    throw std::runtime_error(fmt::format("{} is not an ELF object", filename));
+  }
 
   // Obtain ELF header.
   Elf32_Ehdr *header = elf32_getehdr(elf);
   if (header == nullptr) {
-    throw std::runtime_error("elf32_getehdr() failed");
+    throw std::runtime_error(fmt::format("reading ELF header failed: {}", elf_errmsg(-1)));
   }
 
   // Check ELF header information.
   if (!(header->e_ident[EI_MAG0] == 0x7F &&
         header->e_ident[EI_MAG1] == 'E' &&
         header->e_ident[EI_MAG2] == 'L' &&
-        header->e_ident[EI_MAG3] == 'F' &&
-        header->e_ident[EI_CLASS] == ELFCLASS32 && // 32 bit
-        header->e_ident[EI_DATA] == ELFDATA2LSB && // Little endian
-        header->e_type == ET_EXEC && // Executable file
-        header->e_machine == EM_RISCV &&
-        header->e_version == 1)) {
-    throw std::runtime_error("Unexpected ELF header");
+        header->e_ident[EI_MAG3] == 'F')) {
+    throw std::runtime_error("Unexpected ELF header identifier");
+  }
+  if (header->e_ident[EI_CLASS] != ELFCLASS32) {
+    throw std::runtime_error("ELF file is not 32 bit");
+  }
+  if (header->e_ident[EI_DATA] != ELFDATA2LSB) {
+    throw std::runtime_error("ELF file is not little endian");
+  }
+  if (header->e_type != ET_EXEC) {
+    throw std::runtime_error("ELF file is not executable");
+  }
+  if (header->e_machine != EM_RISCV) {
+    throw std::runtime_error("ELF file is not for RISC-V");
+  }
+  if (header->e_version != 1) {
+    throw std::runtime_error("unexpected ELF version");
   }
 
   // Get the number of program headers.
-  size_t numProgramHeaders;
-  if (elf_getphdrnum(elf, &numProgramHeaders) != 0) {
-    throw std::runtime_error("elf_getphdrnum() failed");
+  size_t numProgramHeaders = header->e_phnum;
+  if (numProgramHeaders == 0) {
+    throw std::runtime_error("no ELF program headers");
   }
 
-  // Retrieve the base memory address from the the program header.
+  // Load program data via the program headers.
   for (size_t i = 0; i < numProgramHeaders; i++) {
     GElf_Phdr programHeader;
-    if (gelf_getphdr(elf, i, &programHeader) == NULL) {
-      throw std::runtime_error("gelf_getphdr() failed");
+    if (gelf_getphdr(elf, i, &programHeader) == nullptr) {
+      throw std::runtime_error(fmt::format("reading program header {} failed: {}", i, elf_errmsg(-1)));
     }
     if (programHeader.p_type == PT_LOAD) {
-      baseAddr = programHeader.p_paddr;
-      std::cout << fmt::format("Base address={:X}\n", baseAddr);
+      if (programHeader.p_offset > fileSize) {
+        throw std::runtime_error("invalid ELF program offset");
+      }
+      uint32_t offset = programHeader.p_paddr - rvsim::MEMORY_BASE_ADDRESS;
+      if (offset + programHeader.p_filesz > rvsim::MEMORY_SIZE_BYTES) {
+        throw std::runtime_error(fmt::format("data from ELF program header {} does not fit in memory", i));
+      }
+      std::memcpy(memory.data() + offset, elfContentsPtr, programHeader.p_filesz);
+      std::cout << fmt::format("Loaded {} bytes into memory\n", programHeader.p_filesz);
     }
-  }
-
-  // Check the base address is as expected..
-  if (baseAddr != rvsim::MEMORY_BASE_ADDRESS) {
-    throw std::runtime_error(fmt::format("unexpected base address: {:#x}", baseAddr));
   }
 
   Elf_Scn *section = nullptr;
@@ -118,24 +140,13 @@ void loadELF(const char *filename, std::map<std::string, uint32_t> &symbolTable,
       for (size_t i = 0; i < count; i++) {
         GElf_Sym symbol;
         gelf_getsym(data, i, &symbol);
-        const char *name =
-            elf_strptr(elf, sectionHeader.sh_link, symbol.st_name);
+        const char *name = elf_strptr(elf, sectionHeader.sh_link, symbol.st_name);
         symbolTable[name] = symbol.st_value;
       }
     }
   }
 
-  // Find the program and load it into the memory.
-  while ((section = elf_nextscn(elf, section)) != nullptr) {
-    gelf_getshdr(section, &sectionHeader);
-    if (sectionHeader.sh_type == SHT_PROGBITS) {
-      Elf_Data *data = elf_getdata(section, nullptr);
-      std::memcpy(reinterpret_cast<char *>(memory.data()) +
-                      sectionHeader.sh_addr - baseAddr,
-                  data->d_buf, sectionHeader.sh_size);
-      std::cout << fmt::format("Loaded {} bytes into memory\n", sectionHeader.sh_size);
-    }
-  }
+  elf_end(elf);
 }
 
 int main(int argc, const char *argv[]) {

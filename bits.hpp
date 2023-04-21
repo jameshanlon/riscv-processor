@@ -3,6 +3,10 @@
 #include <cassert>
 #include <cstdint>
 
+inline uint32_t roundUpToMultipleOf4(uint32_t value) {
+  return (value + 3U) & ~3U;
+}
+
 inline uint32_t extractBits(uint32_t value, unsigned shift, unsigned size) {
   assert(shift + size <= 32 && "invalid shift");
   return (value >> shift) & ((1 << size) - 1);

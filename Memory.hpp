@@ -16,6 +16,10 @@ class Memory {
 public:
   std::array<uint32_t, rvsim::MEMORY_SIZE_WORDS> memory;
 
+  char *data() {
+    return reinterpret_cast<char *>(memory.data());
+  }
+
   uint32_t readMemoryWord(uint32_t address) {
     assert(!(address & 0x3) && "misaligned word access");
     return memory[address >> 2];
