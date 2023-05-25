@@ -7,6 +7,9 @@ include(FetchContent)
 # Use local find scripts
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
+# Python
+find_package(Python REQUIRED COMPONENTS Interpreter)
+
 # LibELF
 find_package(LibElf REQUIRED)
 

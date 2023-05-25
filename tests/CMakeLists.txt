@@ -10,6 +10,7 @@ if (Catch2_FOUND)
   message(STATUS "Fetched Catch2 library")
 endif()
 
+# C++ unit tests
 add_executable(tests
                main.cpp
                tests.cpp)
@@ -18,3 +19,10 @@ target_link_libraries(tests PRIVATE Catch2::Catch2
                                     fmt::fmt)
 
 add_test(NAME tests COMMAND tests)
+
+# Python unit tests
+configure_file(config.py.in ${CMAKE_CURRENT_BINARY_DIR}/config.py)
+configure_file(tests.py ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
+
+add_test(NAME tests.py
+         COMMAND ${Python_EXECUTABLE} tests.py)
