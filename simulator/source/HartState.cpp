@@ -1,4 +1,4 @@
-#include "HartState.hpp"
+#include "rvsim/HartState.hpp"
 
 namespace rvsim {
 

@@ -16,15 +16,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 add_compile_options(-Wall -pedantic)
 
-include_directories(include
-                    ${LIBELF_INCLUDE_DIRS})
-
-# Simulator executable
-add_executable(rvsim main.cpp
-                     HartState.cpp
-                     Trace.cpp)
-target_link_libraries(rvsim fmt::fmt
-                            ${LIBELF_LIBRARIES})
+add_subdirectory(simulator)
 
 # External dependencies
 add_subdirectory(external)

@@ -11,16 +11,16 @@
 #include <stdexcept>
 #include <vector>
 
-#include "SymbolInfo.hpp"
 #include "gelf.h"
 #include "libelf.h"
 #include <fmt/core.h>
 
-#include "bits.hpp"
-#include "HartState.hpp"
-#include "Memory.hpp"
-#include "Executor.hpp"
-#include "Trace.hpp"
+#include "rvsim/bits.hpp"
+#include "rvsim/HartState.hpp"
+#include "rvsim/Memory.hpp"
+#include "rvsim/Executor.hpp"
+#include "rvsim/Trace.hpp"
+#include "rvsim/SymbolInfo.hpp"
 
 #ifndef EM_RISCV
 #define EM_RISCV (243)
