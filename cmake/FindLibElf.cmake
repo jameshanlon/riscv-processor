@@ -12,8 +12,8 @@ find_path(LIBELF_INCLUDE_DIR
 # as a search path since other ELF headers reside here on some platforms.
 if (LIBELF_INCLUDE_DIR MATCHES "libelf$")
   string(REGEX REPLACE "libelf$" ""
-           LILBELF_INCLIDE_DIRS
-           "${LIBELF_INCLUDE_DIR}")
+           LIBELF_INCLUDE_DIRS
+           ${LIBELF_INCLUDE_DIR})
   set(LIBELF_INCLUDE_DIRS
        "${LIBELF_INCLUDE_DIRS}"
        "${LIBELF_INCLUDE_DIR}"
