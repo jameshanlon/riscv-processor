@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14.0)
-project(riscv-simulator)
+project(riscv-processor)
 include(GNUInstallDirs)
 include(ExternalProject)
 include(FetchContent)
@@ -7,22 +7,14 @@ include(FetchContent)
 # Use local find scripts
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
-# Python
-find_package(Python REQUIRED COMPONENTS Interpreter)
-
-# LibELF
-find_package(LibElf REQUIRED)
-
 # Compiler config
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 add_compile_options(-Wall -pedantic)
 
-add_subdirectory(simulator)
-
-# External dependencies
 add_subdirectory(external)
+add_subdirectory(simulator)
 
 # Tests
 enable_testing()

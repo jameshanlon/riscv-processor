@@ -1,3 +1,9 @@
+# Python
+find_package(Python REQUIRED COMPONENTS Interpreter)
+
+# LibELF
+find_package(LibElf REQUIRED)
+
 # fmt
 FetchContent_Declare(fmt
   GIT_REPOSITORY https://github.com/fmtlib/fmt.git
