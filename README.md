@@ -42,18 +42,15 @@ $ sudo apt-get install autoconf automake autotools-dev curl python3 libmpc-dev l
 $ sudo apt-get install device-tree-compiler # For Spike
 ```
 
-Set the following defines in the CMake configure step or the
-`CMakeCache.txt` file:
+Build GNU toolchain, RISC-V PK and Spike:
 ```
-CMAKE_INSTALL_PREFIX=...
-BUILD_GNU_TOOLCHAIN=ON
-BUILD_PK=ON
-BUILD_SPIKE=ON
+$ bash build_riscv_tooling.sh
 ```
 
 Test it all works:
 ```
-$ export PATH=<CMAKE_INSTALL_PREFIX>/bin
+$ export RISCV=`pwd`/install
+$ export PATH=$RISCV/bin:$PATH
 $ echo -e '#include <stdio.h>\n int main(void) { printf("Hello world"); return 0; }' > hello.c
 $ riscv32-unknown-elf-gcc hello.c -o hello
 $ spike --isa=RV32IM pk hello
@@ -61,3 +58,12 @@ bbl loader
 Hello world%
 ```
 
+## Licensing
+
+This repository contains code from [lowRISC/RISC-V Embedded PIC
+Demo](https://github.com/lowRISC/epic-c-example) licensed under the Apache 2.0
+license, and [Tock OS project](https://github.com/tock/libtock-c)
+licensed under either the Apache 2.0 or MIT licenses.
+
+Unless otherwise noted, all code in this repository is licensed under the
+Apache 2.0 license. See [LICENSE](LICENSE) for details.
