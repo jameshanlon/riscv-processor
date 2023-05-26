@@ -1,12 +1,8 @@
-#include "syscall.h"
-
-void putstr(char *s) {
-  while (*s) {
-    putchar(*s++);
-  }
-}
+#include <stddef.h>
+#include <stdint.h>
+#include "util.h"
 
 int main(void) {
-  putstr("Hello world!\n");
+  print("Hello world!\n");
   return 0;
 }

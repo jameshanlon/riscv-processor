@@ -1,15 +1,19 @@
-TESTS_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
-LINKER_SCRIPT ?= $(TESTS_DIR)/runtime/memory.ld
+ROOT_DIR:=$(shell git rev-parse --show-toplevel)
+RUNTIME_DIR:=$(ROOT_DIR)/runtime
+LINKER_SCRIPT ?= $(RUNTIME_DIR)/memory.ld
 
 CC = riscv32-unknown-elf-gcc
-CFLAGS ?= -static -mcmodel=medany -march=rv32im -nostdlib -I$(TESTS_DIR)/runtime
+CFLAGS ?= -static -mcmodel=medany -march=rv32im -nostdlib -I$(RUNTIME_DIR)
 
 AS = riscv32-unknown-elf-as
 ASFLAGS ?= -march=rv32im
 
-KERNEL_ASM_SRCS = $(TESTS_DIR)/runtime/start.S \
-                  $(TESTS_DIR)/runtime/syscall.S
+KERNEL_ASM_SRCS = $(RUNTIME_DIR)/init.S
 KERNEL_ASM_OBJS = $(KERNEL_ASM_SRCS:.S=.asm.o)
+
+KERNEL_C_SRCS = $(RUNTIME_DIR)/htif.c \
+                $(RUNTIME_DIR)/util.c
+KERNEL_C_OBJS = $(KERNEL_ASM_SRCS:.S=.asm.o)
 
 PROGRAM_C_OBJS = $(PROGRAM_C_SRCS:.c=.o)
 
@@ -19,8 +23,8 @@ PROGRAM_C_OBJS = $(PROGRAM_C_SRCS:.c=.o)
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(PROGRAM_NAME).elf: $(LINKER_SCRIPT) $(KERNEL_ASM_OBJS) $(PROGRAM_C_OBJS)
-	$(CC) $(CFLAGS) -T $(LINKER_SCRIPT) $(KERNEL_ASM_OBJS) $(PROGRAM_C_OBJS) -o $@
+$(PROGRAM_NAME).elf: $(LINKER_SCRIPT) $(KERNEL_ASM_OBJS) $(KERNEL_C_OBJS) $(PROGRAM_C_OBJS)
+	$(CC) $(CFLAGS) -T $(LINKER_SCRIPT) $(KERNEL_ASM_OBJS) $(KERNEL_C_OBJS) $(PROGRAM_C_OBJS) -o $@
 
 $(PROGRAM_NAME).dis: $(PROGRAM_NAME).elf
 	riscv32-unknown-elf-objdump -D $< > $@
@@ -33,4 +37,5 @@ clean:
 		rm -rf $(PROGRAM_NAME).dis \
            $(PROGRAM_NAME).elf \
            $(KERNEL_ASM_OBJS) \
+           $(KERNEL_C_OBJS) \
            $(PROGRAM_C_OBJS)
