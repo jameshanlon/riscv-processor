@@ -54,7 +54,7 @@ public:
   void start(const HartState &state) {
     this->state = &state;
     // Cycle count, logical PC
-    auto logicalPC = state.pc + MEMORY_BASE_ADDRESS;
+    auto logicalPC = state.pc;
     out << fmt::format("{:<8} 0x{:<8X} ", state.cycleCount, logicalPC);
     // Symbol name, if available.
     auto symbol = state.symbolInfo.getSymbol(logicalPC);

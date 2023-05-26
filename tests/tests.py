@@ -44,6 +44,15 @@ class RVSimTests(unittest.TestCase):
         logging.debug(f'{" ".join(str(arg) for arg in cmd)}')
         return subprocess.run(cmd, capture_output=True)
 
+    def simulate_with_rvsim(self, elf_filename):
+        cmd = [config.RVSIM,
+               '--mem-base', 0x2000,
+               '--mem-size', 0x80000000-0x2000,
+               elf_filename
+              ]
+        logging.debug(f'{" ".join(str(arg) for arg in cmd)}')
+        return subprocess.run(cmd, capture_output=True)
+
     def test_tools(self):
         self.assertTrue(os.path.exists(config.RISCV_UNKNOWN_ELF_GCC))
         self.assertTrue(os.path.exists(config.RISCV_UNKNOWN_ELF_AS))

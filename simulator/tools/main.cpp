@@ -22,6 +22,9 @@
 #include "rvsim/Trace.hpp"
 #include "rvsim/SymbolInfo.hpp"
 
+const size_t DEFAULT_MEMORY_BASE_ADDRESS = 0x10000;
+const size_t DEFAULT_MEMORY_SIZE_BYTES   = 0x10000*4; // 1 KB
+
 #ifndef EM_RISCV
 #define EM_RISCV (243)
 #endif
@@ -37,8 +40,9 @@ static void help(const char *argv[]) {
   std::cout << "Optional arguments:\n";
   std::cout << "  -h,--help       Display this message\n";
   std::cout << "  -t,--trace      Enable instruction tracing\n";
-  std::cout << "  --max-cycles N  Limit the number of simulation cycles "
-               "(default: 0)\n";
+  std::cout << "  --max-cycles N  Limit the number of simulation cycles (default: 0)\n";
+  std::cout << "  --mem-base B    Set the memory base address in bytes (default: " << DEFAULT_MEMORY_BASE_ADDRESS << ")\n";
+  std::cout << "  --mem-size B    Set the memory size in bytes (default: " << DEFAULT_MEMORY_SIZE_BYTES << ")\n";
 }
 
 void loadELF(const char *filename, rvsim::SymbolInfo &symbolInfo, rvsim::Memory &memory) {
@@ -119,8 +123,8 @@ void loadELF(const char *filename, rvsim::SymbolInfo &symbolInfo, rvsim::Memory 
       if (programHeader.p_offset > fileSize) {
         throw std::runtime_error("invalid ELF program offset");
       }
-      uint32_t offset = programHeader.p_paddr - rvsim::MEMORY_BASE_ADDRESS;
-      if (offset + programHeader.p_filesz > rvsim::MEMORY_SIZE_BYTES) {
+      uint32_t offset = programHeader.p_paddr - memory.baseAddress;
+      if (offset + programHeader.p_filesz > memory.sizeInBytes()) {
         throw std::runtime_error(fmt::format("data from ELF program header {} does not fit in memory", i));
       }
       std::memcpy(memory.data() + offset, elfContentsPtr, programHeader.p_filesz);
@@ -161,6 +165,8 @@ int main(int argc, const char *argv[]) {
     const char *filename = nullptr;
     bool trace = false;
     size_t maxCycles = 0;
+    size_t memBase = DEFAULT_MEMORY_BASE_ADDRESS;
+    size_t memSize = DEFAULT_MEMORY_SIZE_BYTES;
     // Parse the command line.
     for (int i = 1; i < argc; ++i) {
       if (std::strcmp(argv[i], "-t") == 0 ||
@@ -168,6 +174,10 @@ int main(int argc, const char *argv[]) {
         trace = true;
       } else if (std::strcmp(argv[i], "--max-cycles") == 0) {
         maxCycles = std::stoull(argv[++i]);
+      } else if (std::strcmp(argv[i], "--mem-base") == 0) {
+        memBase = std::stoull(argv[++i]);
+      } else if (std::strcmp(argv[i], "--mem-size") == 0) {
+        memSize = std::stoull(argv[++i]);
       } else if (std::strcmp(argv[i], "-h") == 0 ||
                  std::strcmp(argv[i], "--help") == 0) {
         help(argv);
@@ -188,11 +198,11 @@ int main(int argc, const char *argv[]) {
     // Instance the state and executor.
     rvsim::SymbolInfo symbolInfo;
     rvsim::HartState state(symbolInfo);
-    rvsim::Memory memory;
+    rvsim::Memory memory(memBase, memSize);
     rvsim::Executor executor(state, memory);
     // Load the ELF file.
     loadELF(filename, symbolInfo, memory);
-    state.pc = symbolInfo.getSymbol("_start")->value - rvsim::MEMORY_BASE_ADDRESS;
+    state.pc = symbolInfo.getSymbol("_start")->value;
     // Step the model.
     while (true) {
       if (trace) {

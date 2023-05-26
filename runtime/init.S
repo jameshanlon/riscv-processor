@@ -21,9 +21,8 @@ stack_top:
 .global _start
 
 _start:
-    la t0, trap_handler
-    csrw mtvec, t0
-
+    #la t0, trap_handler
+    #csrw mtvec, t0
     la sp, stack_top
     li gp, 0
     call main
