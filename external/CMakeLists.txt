@@ -1,5 +1,5 @@
 # Python
-find_package(Python REQUIRED COMPONENTS Interpreter)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 # LibELF
 find_package(LibElf REQUIRED)

@@ -25,4 +25,4 @@ configure_file(config.py.in ${CMAKE_CURRENT_BINARY_DIR}/config.py)
 configure_file(tests.py ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
 
 add_test(NAME tests.py
-         COMMAND ${Python_EXECUTABLE} tests.py)
+         COMMAND ${_Python_EXECUTABLE} tests.py)
