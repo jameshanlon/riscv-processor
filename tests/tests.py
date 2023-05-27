@@ -38,7 +38,7 @@ class RVSimTests(unittest.TestCase):
     def simulate_with_spike(self, elf_filename):
         cmd = [config.RISCV_SPIKE,
                '--isa=RV32IM',
-               '-m0x00002000:0xFFFE000,0x10000000:0x70000000,0x80000000:0x80000000',
+               '-m0x00002000:0xFFE000,0x1000000:0x1000000',
                elf_filename
               ]
         logging.debug(f'{" ".join(str(arg) for arg in cmd)}')
