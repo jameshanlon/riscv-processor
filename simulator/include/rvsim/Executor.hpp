@@ -58,6 +58,11 @@ struct UnknownOpcodeException : public Exception {
     : Exception(std::string("unknown opcode: "+name)) {}
 };
 
+struct UnknownSysImmException : public Exception {
+  UnknownSysImmException(uint32_t value)
+    : Exception(std::string("unknown sys immediate: ")+std::to_string(value)) {}
+};
+
 #define TRACE(...) \
   do { \
     if (trace) { \
@@ -148,7 +153,7 @@ public:
     /// Jump and link.
     template <bool trace>
     void execute_JAL(const InstructionJType &instruction) {
-      auto imm = signExtend(instruction.imm, 20);
+      auto imm = signExtend(instruction.imm, 21);
       auto offset = imm;
       auto result = state.pc + 4;
       state.writeReg(instruction.rd, result);
@@ -163,8 +168,8 @@ public:
     /// Jump and link register.
     template <bool trace>
     void execute_JALR(const InstructionIType &instruction) {
-      auto base = instruction.rs1;
-      auto imm = signExtend(instruction.imm, 19);
+      auto base = state.readReg(instruction.rs1);
+      auto imm = signExtend(instruction.imm, 12);
       auto offset = imm << 1;
       auto targetPC = (base + offset) & ~1U;
       auto result = state.pc + 4;
@@ -234,13 +239,13 @@ public:
     OP_REG_RTYPE_INSTR(SLT,  static_cast<int32_t>(rs1) < static_cast<uint32_t>(rs2) ? 1 : 0);
     OP_REG_RTYPE_INSTR(SLTU, rs1 < rs2 ? 1 : 0);
 
-    #define BRANCH_STYPE_INSTR(mnemonic, expression) \
+    #define BRANCH_BTYPE_INSTR(mnemonic, expression) \
       template <bool trace> \
-      void execute_##mnemonic(const InstructionSType &instruction) { \
+      void execute_##mnemonic(const InstructionBType &instruction) { \
         auto rs1 = state.readReg(instruction.rs1); \
         auto rs2 = state.readReg(instruction.rs2); \
-        int32_t imm = signExtend(instruction.imm, 12); \
-        int32_t offset = imm; \
+        auto imm = signExtend(instruction.imm, 12); \
+        auto offset = imm; \
         TRACE(STR(mnemonic), RegSrc(instruction.rs1), RegSrc(instruction.rs2), ImmValue(imm)); \
         if (expression) { \
           state.pc += offset; \
@@ -250,21 +255,21 @@ public:
         TRACE_END(); \
       }
 
-    BRANCH_STYPE_INSTR(BEQ,  rs1 == rs2);
-    BRANCH_STYPE_INSTR(BNE,  rs1 != rs2);
-    BRANCH_STYPE_INSTR(BLT,  static_cast<int32_t>(rs1) < static_cast<int32_t>(rs2));
-    BRANCH_STYPE_INSTR(BGE,  static_cast<int32_t>(rs1) >= static_cast<int32_t>(rs2));
-    BRANCH_STYPE_INSTR(BLTU, rs1 < rs2);
-    BRANCH_STYPE_INSTR(BGEU, rs1 >= rs2);
+    BRANCH_BTYPE_INSTR(BEQ,  rs1 == rs2);
+    BRANCH_BTYPE_INSTR(BNE,  rs1 != rs2);
+    BRANCH_BTYPE_INSTR(BLT,  static_cast<int32_t>(rs1) < static_cast<int32_t>(rs2));
+    BRANCH_BTYPE_INSTR(BGE,  static_cast<int32_t>(rs1) >= static_cast<int32_t>(rs2));
+    BRANCH_BTYPE_INSTR(BLTU, rs1 < rs2);
+    BRANCH_BTYPE_INSTR(BGEU, rs1 >= rs2);
 
     #define STORE_STYPE_INSTR(mnemonic, memory_function) \
       template <bool trace> \
       void execute_##mnemonic(const InstructionSType &instruction) { \
-        auto base = instruction.rs1; \
+        auto base = state.readReg(instruction.rs1); \
         auto offset = signExtend(instruction.imm, 12); \
         auto effectiveAddr = base + offset; \
-        memory.memory_function(effectiveAddr, instruction.rs2); \
-        TRACE(STR(mnemonic), RegSrc(instruction.rs2), RegSrc(base), ImmValue(offset)); \
+        memory.memory_function(effectiveAddr, state.readReg(instruction.rs2)); \
+        TRACE(STR(mnemonic), RegSrc(instruction.rs2), RegSrc(instruction.rs1), ImmValue(offset)); \
         TRACE_MEM_WRITE(effectiveAddr, instruction.rs2); \
         TRACE_END(); \
       }
@@ -276,13 +281,13 @@ public:
     #define LOAD_ITYPE_INSTR(mnemonic, memory_function, result_expression) \
       template <bool trace> \
       void execute_##mnemonic(const InstructionIType &instruction) { \
-        auto base = instruction.rs1; \
+        auto base = state.readReg(instruction.rs1); \
         auto offset = signExtend(instruction.imm, 12); \
         auto effectiveAddr = base + offset; \
         auto result = memory.memory_function(effectiveAddr); \
         result = result_expression; \
         state.writeReg(instruction.rd, result); \
-        TRACE(STR(mnemonic), RegDst(instruction.rd), RegSrc(base), ImmValue(offset)); \
+        TRACE(STR(mnemonic), RegDst(instruction.rd), RegSrc(instruction.rs1), ImmValue(offset)); \
         TRACE_REG_WRITE(instruction.rd, result); \
         TRACE_END(); \
       }
@@ -324,7 +329,7 @@ public:
           execute_JALR<trace>(InstructionIType(value));
           break;
         case Opcode::BRANCH: {
-          auto instr = InstructionSType(value);
+          auto instr = InstructionBType(value);
           switch (instr.funct) {
             case 0b000: execute_BEQ<trace>(instr); break;
             case 0b001: execute_BNE<trace>(instr); break;
@@ -407,11 +412,11 @@ public:
           switch (instr.imm) {
             case 0b0: execute_ECALL<trace>(instr); break;
             case 0b1: execute_EBREAK<trace>(instr); break;
-            default: throw std::runtime_error("unknown SYS immediate");
+            default: throw UnknownSysImmException(instr.imm);
           }
           break;
         }
-        default: throw std::runtime_error("unknown opcode");
+        default: throw UnknownOpcodeException(std::to_string(opcode));
       }
     }
     // clang-format on
@@ -420,6 +425,7 @@ public:
     template<bool trace>
     void step() {
       auto fetchData = memory.readMemoryWord(state.pc);
+      state.fetchAddress = state.pc;
       dispatchInstruction<trace>(fetchData);
       if (!state.branchTaken) {
         state.pc += 4;

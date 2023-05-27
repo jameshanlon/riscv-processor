@@ -127,7 +127,7 @@ void loadELF(const char *filename, rvsim::SymbolInfo &symbolInfo, rvsim::Memory 
       if (offset + programHeader.p_filesz > memory.sizeInBytes()) {
         throw std::runtime_error(fmt::format("data from ELF program header {} does not fit in memory", i));
       }
-      std::memcpy(memory.data() + offset, elfContentsPtr, programHeader.p_filesz);
+      std::memcpy(memory.data() + offset, elfContentsPtr + programHeader.p_offset, programHeader.p_filesz);
       std::cout << fmt::format("Loaded {} bytes into memory\n", programHeader.p_filesz);
     }
   }
@@ -216,8 +216,8 @@ int main(int argc, const char *argv[]) {
     }
   } catch (rvsim::ExitException &e) {
     return e.returnValue;
-  } catch (rvsim::UnknownOpcodeException &e) {
-    std::cerr << "Unknown opcode: " << e.what() << "\n";
+  } catch (rvsim::Exception &e) {
+    std::cerr << e.what() << "\n";
     return 1;
   } catch (std::exception &e) {
     std::cerr << "Error: " << e.what() << "\n";

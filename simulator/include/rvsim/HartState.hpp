@@ -63,6 +63,7 @@ public:
   // Non-architectural.
   SymbolInfo &symbolInfo;
   uint64_t cycleCount;
+  uint32_t fetchAddress;
   bool branchTaken;
 
   HartState(SymbolInfo &symbolInfo)
