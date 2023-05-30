@@ -25,9 +25,9 @@ uintptr_t syscall(uintptr_t n, uintptr_t a0, uintptr_t a1, uintptr_t a2,
                   uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
 {
     uint64_t th = TOHOST;
-    if(th) {
+    if (th) {
         __builtin_trap();
-        while(1) {}
+        while (1) {}
     }
 
     static volatile uint64_t htif_mem[8];
@@ -39,11 +39,11 @@ uintptr_t syscall(uintptr_t n, uintptr_t a0, uintptr_t a1, uintptr_t a2,
     htif_mem[5] = a4;
     htif_mem[6] = a5;
     htif_mem[7] = a6;
-    TOHOST = (uintptr_t)htif_mem;
+    TOHOST = (uintptr_t) htif_mem;
 
-    while(1) {
+    while (1) {
         uint64_t fh = FROMHOST;
-        if(fh) {
+        if (fh) {
             FROMHOST = 0;
             break;
         }
@@ -54,5 +54,5 @@ uintptr_t syscall(uintptr_t n, uintptr_t a0, uintptr_t a1, uintptr_t a2,
 
 void shutdown(int code) {
     syscall(SYS_exit, code, 0, 0, 0, 0, 0, 0);
-    while(1) {}
+    while (1) {}
 }

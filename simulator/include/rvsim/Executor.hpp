@@ -7,7 +7,7 @@
 #include <iostream>
 #include <exception>
 #include <stdexcept>
-#include <format>
+#include <unistd.h>
 
 #include "bits.hpp"
 #include "HartState.hpp"
@@ -32,10 +32,13 @@ enum Opcode {
 };
 
 enum Ecall {
-  EXIT = 0,
-  GET_CHAR = 1,
-  PUT_CHAR = 2
+  READ  = 63,
+  WRITE = 64,
+  EXIT  = 93
 };
+
+const uint32_t HTIF_TOHOST_ADDRESS   = 0x0002000;
+const uint32_t HTIF_FROMHOST_ADDRESS = 0x0002008;
 
 struct ExitException : public std::exception {
   uint32_t returnValue;
@@ -48,9 +51,9 @@ struct Exception : std::runtime_error {
   Exception(std::string message) : std::runtime_error(message) {}
 };
 
-struct UnknownEcallException : public Exception {
-  UnknownEcallException(uint32_t value)
-    : Exception(std::string("unknown ecall: ")+std::to_string(value)) {}
+struct UnknownSyscallException : public Exception {
+  UnknownSyscallException(uint32_t value)
+    : Exception(std::string("unknown syscall: ")+std::to_string(value)) {}
 };
 
 struct UnknownOpcodeException : public Exception {
@@ -93,39 +96,96 @@ struct UnknownSysImmException : public Exception {
 
 #define STR(s) #s
 
+class FileDescriptors {
+public:
+  FileDescriptors() {}
+  void add(int fd) {
+    fileDescs.push_back(fd);
+  }
+  int get(int index) {
+    if (index >= fileDescs.size()) {
+      throw std::runtime_error("invalid file descriptor");
+    } else {
+      return fileDescs[index];
+    }
+  }
+private:
+  std::vector<int> fileDescs;
+};
+
 class Executor {
 public:
     HartState &state;
     Memory &memory;
+    FileDescriptors fileDescs;
 
     Executor(HartState &state, Memory &memory)
-        : state(state), memory(memory) {}
+        : state(state), memory(memory) {
+      int stdinFileDesc = dup(0);
+      int stdoutFileDesc = dup(1);
+      int stderrFileDesc = dup(2);
+      if (stdinFileDesc < 0 || stdoutFileDesc < 0 || stderrFileDesc < 0) {
+        throw std::runtime_error("could not dup stdin/stdout/stderr");
+      }
+      fileDescs.add(stdinFileDesc);
+      fileDescs.add(stdoutFileDesc);
+      fileDescs.add(stderrFileDesc);
+    }
 
     template<bool trace>
-    void handleEcall() {
-      auto ecallID = state.readReg(10);
-      switch (ecallID) {
-        case Ecall::EXIT: {
-          auto value = state.readReg(11);
-          TRACE("ECALL EXIT", ArgValue(value));
-          TRACE_END();
-          throw ExitException(value);
-        }
-        case Ecall::GET_CHAR: {
-          // To do.
-          TRACE("ECALL GET_CHAR");
-          TRACE_END();
+    uint32_t syscallExit(uint64_t *htifMem) {
+      auto value = htifMem[1];
+      TRACE("ECALL EXIT", ArgValue(value));
+      TRACE_END();
+      return value;
+    }
+
+    template<bool trace>
+    uint32_t syscallRead(uint64_t *htifMem) {
+      auto fd = htifMem[1];
+      auto pbuf = htifMem[2];
+      auto len = htifMem[3];
+      std::vector<uint8_t> buffer(len);
+      ssize_t ret = read(fileDescs.get(fd), buffer.data(), len);
+      if (ret) {
+        memory.write(pbuf, ret, buffer.data());
+      }
+      TRACE("ECALL READ", ArgValue(fd), ArgValue(pbuf), ArgValue(len));
+      TRACE_END();
+      return ret;
+    }
+
+    template<bool trace>
+    uint32_t syscallWrite(uint64_t *htifMem) {
+      auto fd = htifMem[1];
+      auto pbuf = htifMem[2];
+      auto len = htifMem[3];
+      std::vector<uint8_t> buffer(len);
+      memory.read(pbuf, buffer.data(), len);
+      ssize_t ret = write(fileDescs.get(fd), buffer.data(), len);
+      TRACE("ECALL WRITE", ArgValue(fd), ArgValue(pbuf), ArgValue(len));
+      TRACE_END();
+      return ret;
+    }
+
+    template<bool trace>
+    void handleSyscall(uint64_t toHostCommand) {
+      std::array<uint64_t, 8> htifMem;
+      memory.read(toHostCommand, reinterpret_cast<uint8_t*>(htifMem.data()), sizeof(htifMem));
+      ssize_t ret;
+      switch (htifMem[0]) {
+        case Ecall::EXIT:
+          throw ExitException(syscallExit<trace>(htifMem.data()));
+        case Ecall::READ:
+          ret = syscallRead<trace>(htifMem.data());
+          memory.writeMemoryDoubleWord(HTIF_FROMHOST_ADDRESS, ret);
           break;
-        }
-        case Ecall::PUT_CHAR: {
-          // To do.
-          auto value = state.readReg(11);
-          TRACE("ECALL PUT_CHAR", ArgValue(value));
-          TRACE_END();
+        case Ecall::WRITE:
+          ret = syscallWrite<trace>(htifMem.data());
+          memory.writeMemoryDoubleWord(HTIF_FROMHOST_ADDRESS, ret);
           break;
-        }
         default:
-          throw UnknownEcallException(ecallID);
+          throw UnknownSyscallException(htifMem[0]);
       }
     }
 
@@ -301,7 +361,7 @@ public:
     /// Environment call.
     template <bool trace>
     void execute_ECALL(const InstructionIType &instruction) {
-      handleEcall<trace>();
+      // Unimplemented.
     }
 
     /// Environment break.
@@ -427,6 +487,12 @@ public:
       auto fetchData = memory.readMemoryWord(state.pc);
       state.fetchAddress = state.pc;
       dispatchInstruction<trace>(fetchData);
+      auto toHostCommand = memory.readMemoryDoubleWord(HTIF_TOHOST_ADDRESS);
+      if (toHostCommand != 0) {
+        handleSyscall<trace>(toHostCommand);
+        // Clear the syscall.
+        memory.writeMemoryDoubleWord(HTIF_TOHOST_ADDRESS, 0);
+      }
       if (!state.branchTaken) {
         state.pc += 4;
       } else {
