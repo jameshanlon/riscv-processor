@@ -87,6 +87,13 @@ struct UnknownSysImmException : public Exception {
     } \
   } while(0)
 
+#define TRACE_MEM_READ(reg, address, value) \
+  do { \
+    if (trace) { \
+      Trace::get().memRead(reg, address, value); \
+    } \
+  } while(0)
+
 #define TRACE_END() \
   do { \
     if (trace) { \
@@ -248,13 +255,13 @@ public:
         auto rs1 = state.readReg(instruction.rs1); \
         auto imm = extract_immediate; \
         auto result = expression; \
-        state.writeReg(instruction.rd, result); \
         TRACE(STR(mnemonic), RegDst(instruction.rd), RegSrc(instruction.rs1), ImmValue(imm)); \
+        state.writeReg(instruction.rd, result); \
         TRACE_REG_WRITE(instruction.rd, result); \
         TRACE_END(); \
       }
 
-    OP_IMM_ITYPE_INSTR(ADDI,  instruction.imm, rs1 + imm)
+    OP_IMM_ITYPE_INSTR(ADDI,  signExtend(instruction.imm, 12), rs1 + imm)
     OP_IMM_ITYPE_INSTR(XORI,  instruction.imm, rs1 ^ imm);
     OP_IMM_ITYPE_INSTR(ORI,   instruction.imm, rs1 | imm);
     OP_IMM_ITYPE_INSTR(ANDI,  instruction.imm, rs1 & imm);
@@ -266,8 +273,8 @@ public:
       void execute_##mnemonic (const InstructionIShamtType &instruction) { \
         auto rs1 = state.readReg(instruction.rs1); \
         auto result = expression; \
-        state.writeReg(instruction.rd, result); \
         TRACE(STR(mnemonic), RegDst(instruction.rd), RegSrc(instruction.rs1), ImmValue(instruction.shamt)); \
+        state.writeReg(instruction.rd, result); \
         TRACE_REG_WRITE(instruction.rd, result); \
         TRACE_END(); \
       }
@@ -282,8 +289,8 @@ public:
         auto rs1 = state.readReg(instruction.rs1); \
         auto rs2 = state.readReg(instruction.rs2); \
         auto result = expression; \
-        state.writeReg(instruction.rd, result); \
         TRACE(STR(mnemonic), RegDst(instruction.rd), RegSrc(instruction.rs1), RegSrc(instruction.rs2)); \
+        state.writeReg(instruction.rd, result); \
         TRACE_REG_WRITE(RegDst(instruction.rd), result); \
         TRACE_END(); \
       }
@@ -330,7 +337,7 @@ public:
         auto effectiveAddr = base + offset; \
         memory.memory_function(effectiveAddr, state.readReg(instruction.rs2)); \
         TRACE(STR(mnemonic), RegSrc(instruction.rs2), RegSrc(instruction.rs1), ImmValue(offset)); \
-        TRACE_MEM_WRITE(effectiveAddr, instruction.rs2); \
+        TRACE_MEM_WRITE(effectiveAddr, state.readReg(instruction.rs2)); \
         TRACE_END(); \
       }
 
@@ -346,9 +353,9 @@ public:
         auto effectiveAddr = base + offset; \
         auto result = memory.memory_function(effectiveAddr); \
         result = result_expression; \
-        state.writeReg(instruction.rd, result); \
         TRACE(STR(mnemonic), RegDst(instruction.rd), RegSrc(instruction.rs1), ImmValue(offset)); \
-        TRACE_REG_WRITE(instruction.rd, result); \
+        state.writeReg(instruction.rd, result); \
+        TRACE_MEM_READ(instruction.rd, effectiveAddr, result); \
         TRACE_END(); \
       }
 
@@ -406,9 +413,9 @@ public:
           switch (instr.funct) {
             case 0b000: execute_LB<trace>(instr); break;
             case 0b001: execute_LH<trace>(instr); break;
-            case 0b101: execute_LW<trace>(instr); break;
-            case 0b010: execute_LBU<trace>(instr); break;
-            case 0b100: execute_LHU<trace>(instr); break;
+            case 0b010: execute_LW<trace>(instr); break;
+            case 0b100: execute_LBU<trace>(instr); break;
+            case 0b101: execute_LHU<trace>(instr); break;
             default: throw UnknownOpcodeException("LOAD");
           }
           break;

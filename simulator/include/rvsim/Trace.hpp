@@ -68,7 +68,7 @@ public:
   }
 
   void printOperand(const char *string) {
-    out << fmt::format("{} ", string);
+    out << fmt::format("{:<7} ", string);
   }
 
   void printOperand(RegDst &dest) {
@@ -80,7 +80,7 @@ public:
   }
 
   void printOperand(ImmValue &imm) {
-    out << fmt::format("{} ", imm.value);
+    out << fmt::format("{} ", (int32_t)imm.value);
   }
 
   void printOperand(ArgValue &arg) {
@@ -97,6 +97,10 @@ public:
 
   void memWrite(uint32_t address, uint32_t value) {
     out << fmt::format("mem[{:#x}]={:#x} ", address, value);
+  }
+
+  void memRead(RegDst dest, uint32_t address, uint32_t value) {
+    out << fmt::format("{}={:#x} from mem[{:#x}] ", getRegisterName(dest.reg), value, address);
   }
 
   void syscall(const char *string) {
