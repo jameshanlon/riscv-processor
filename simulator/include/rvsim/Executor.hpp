@@ -210,7 +210,7 @@ public:
     /// Add upper immediate to PC.
     template <bool trace>
     void execute_AUIPC(const InstructionUType &instruction) {
-      auto offset = insertBits(0U, instruction.imm, 20, 12) & ~0xFFF;
+      auto offset = insertBits(0U, instruction.imm, 12, 20) & ~0xFFF;
       auto result = state.pc + offset;
       state.writeReg(instruction.rd, result);
       TRACE("AUIPC", RegDst(instruction.rd), ImmValue(instruction.imm));
