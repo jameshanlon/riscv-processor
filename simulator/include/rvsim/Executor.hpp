@@ -110,7 +110,7 @@ public:
   void add(int fd) {
     fileDescs.push_back(fd);
   }
-  int get(int index) {
+  int get(size_t index) {
     if (index >= fileDescs.size()) {
       throw Exception("invalid file descriptor");
     } else {
@@ -263,11 +263,11 @@ public:
       }
 
     OP_IMM_ITYPE_INSTR(ADDI,  signExtend(instruction.imm, 12), rs1 + imm)
-    OP_IMM_ITYPE_INSTR(XORI,  instruction.imm, rs1 ^ imm);
-    OP_IMM_ITYPE_INSTR(ORI,   instruction.imm, rs1 | imm);
-    OP_IMM_ITYPE_INSTR(ANDI,  instruction.imm, rs1 & imm);
-    OP_IMM_ITYPE_INSTR(SLTI,  signExtend(instruction.imm, 12), rs1 < imm ? 1 : 0);
-    OP_IMM_ITYPE_INSTR(SLTIU, instruction.imm, rs1 < imm ? 1 : 0);
+    OP_IMM_ITYPE_INSTR(XORI,  instruction.imm, rs1 ^ imm)
+    OP_IMM_ITYPE_INSTR(ORI,   instruction.imm, rs1 | imm)
+    OP_IMM_ITYPE_INSTR(ANDI,  instruction.imm, rs1 & imm)
+    OP_IMM_ITYPE_INSTR(SLTI,  signExtend(instruction.imm, 12), rs1 < imm ? 1 : 0)
+    OP_IMM_ITYPE_INSTR(SLTIU, instruction.imm, rs1 < imm ? 1 : 0)
 
     #define OP_IMM_SHAMT_INSTR(mnemonic, expression) \
       template <bool trace> \
@@ -280,9 +280,9 @@ public:
         TRACE_END(); \
       }
 
-    OP_IMM_SHAMT_INSTR(SLLI, rs1 << instruction.shamt);
-    OP_IMM_SHAMT_INSTR(SRLI, rs1 >> instruction.shamt);
-    OP_IMM_SHAMT_INSTR(SRAI, static_cast<int32_t>(rs1) >> instruction.shamt);
+    OP_IMM_SHAMT_INSTR(SLLI, rs1 << instruction.shamt)
+    OP_IMM_SHAMT_INSTR(SRLI, rs1 >> instruction.shamt)
+    OP_IMM_SHAMT_INSTR(SRAI, static_cast<int32_t>(rs1) >> instruction.shamt)
 
     #define OP_REG_RTYPE_INSTR(mnemonic, expression) \
       template <bool trace> \
@@ -296,16 +296,16 @@ public:
         TRACE_END(); \
       }
 
-    OP_REG_RTYPE_INSTR(ADD,  rs1 + rs2);
-    OP_REG_RTYPE_INSTR(SUB,  rs1 - rs2);
-    OP_REG_RTYPE_INSTR(SLL,  rs1 << rs2);
-    OP_REG_RTYPE_INSTR(SRL,  rs1 >> rs2);
-    OP_REG_RTYPE_INSTR(SRA,  static_cast<int32_t>(rs1) >> rs2);
-    OP_REG_RTYPE_INSTR(OR,   rs1 | rs2);
-    OP_REG_RTYPE_INSTR(AND,  rs1 & rs2);
-    OP_REG_RTYPE_INSTR(XOR,  rs1 ^ rs2);
-    OP_REG_RTYPE_INSTR(SLT,  static_cast<int32_t>(rs1) < static_cast<uint32_t>(rs2) ? 1 : 0);
-    OP_REG_RTYPE_INSTR(SLTU, rs1 < rs2 ? 1 : 0);
+    OP_REG_RTYPE_INSTR(ADD,  rs1 + rs2)
+    OP_REG_RTYPE_INSTR(SUB,  rs1 - rs2)
+    OP_REG_RTYPE_INSTR(SLL,  rs1 << rs2)
+    OP_REG_RTYPE_INSTR(SRL,  rs1 >> rs2)
+    OP_REG_RTYPE_INSTR(SRA,  static_cast<int32_t>(rs1) >> rs2)
+    OP_REG_RTYPE_INSTR(OR,   rs1 | rs2)
+    OP_REG_RTYPE_INSTR(AND,  rs1 & rs2)
+    OP_REG_RTYPE_INSTR(XOR,  rs1 ^ rs2)
+    OP_REG_RTYPE_INSTR(SLT,  static_cast<int32_t>(rs1) < static_cast<int32_t>(rs2) ? 1 : 0)
+    OP_REG_RTYPE_INSTR(SLTU, rs1 < rs2 ? 1 : 0)
 
     #define BRANCH_BTYPE_INSTR(mnemonic, expression) \
       template <bool trace> \
@@ -323,12 +323,12 @@ public:
         TRACE_END(); \
       }
 
-    BRANCH_BTYPE_INSTR(BEQ,  rs1 == rs2);
-    BRANCH_BTYPE_INSTR(BNE,  rs1 != rs2);
-    BRANCH_BTYPE_INSTR(BLT,  static_cast<int32_t>(rs1) < static_cast<int32_t>(rs2));
-    BRANCH_BTYPE_INSTR(BGE,  static_cast<int32_t>(rs1) >= static_cast<int32_t>(rs2));
-    BRANCH_BTYPE_INSTR(BLTU, rs1 < rs2);
-    BRANCH_BTYPE_INSTR(BGEU, rs1 >= rs2);
+    BRANCH_BTYPE_INSTR(BEQ,  rs1 == rs2)
+    BRANCH_BTYPE_INSTR(BNE,  rs1 != rs2)
+    BRANCH_BTYPE_INSTR(BLT,  static_cast<int32_t>(rs1) < static_cast<int32_t>(rs2))
+    BRANCH_BTYPE_INSTR(BGE,  static_cast<int32_t>(rs1) >= static_cast<int32_t>(rs2))
+    BRANCH_BTYPE_INSTR(BLTU, rs1 < rs2)
+    BRANCH_BTYPE_INSTR(BGEU, rs1 >= rs2)
 
     #define STORE_STYPE_INSTR(mnemonic, memory_function) \
       template <bool trace> \
@@ -342,9 +342,9 @@ public:
         TRACE_END(); \
       }
 
-    STORE_STYPE_INSTR(SB, writeMemoryByte);
-    STORE_STYPE_INSTR(SH, writeMemoryHalf);
-    STORE_STYPE_INSTR(SW, writeMemoryWord);
+    STORE_STYPE_INSTR(SB, writeMemoryByte)
+    STORE_STYPE_INSTR(SH, writeMemoryHalf)
+    STORE_STYPE_INSTR(SW, writeMemoryWord)
 
     #define LOAD_ITYPE_INSTR(mnemonic, memory_function, result_expression) \
       template <bool trace> \
@@ -360,11 +360,11 @@ public:
         TRACE_END(); \
       }
 
-    LOAD_ITYPE_INSTR(LB,  readMemoryByte, signExtend(result, 8));
-    LOAD_ITYPE_INSTR(LH,  readMemoryHalf, signExtend(result, 16));
-    LOAD_ITYPE_INSTR(LW,  readMemoryWord, result);
-    LOAD_ITYPE_INSTR(LBU, readMemoryByte, result);
-    LOAD_ITYPE_INSTR(LHU, readMemoryHalf, result);
+    LOAD_ITYPE_INSTR(LB,  readMemoryByte, signExtend(result, 8))
+    LOAD_ITYPE_INSTR(LH,  readMemoryHalf, signExtend(result, 16))
+    LOAD_ITYPE_INSTR(LW,  readMemoryWord, result)
+    LOAD_ITYPE_INSTR(LBU, readMemoryByte, result)
+    LOAD_ITYPE_INSTR(LHU, readMemoryHalf, result)
 
     /// Environment call.
     template <bool trace>

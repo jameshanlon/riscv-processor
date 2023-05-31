@@ -89,4 +89,4 @@ struct InstructionJType : public InstructionFormat {
   }
 };
 
-}; // End namespace rvsim.
+} // End namespace rvsim.

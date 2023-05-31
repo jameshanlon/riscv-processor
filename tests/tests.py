@@ -70,7 +70,6 @@ class RVSimTests(unittest.TestCase):
         output_filename = Path(config.BINARY_DIR)/'a.out'
         self.compile_c_program(input_filename, output_filename)
         result = self.simulate_with_rvsim(output_filename)
-        print(result)
         self.assertTrue(result.stdout.decode('ascii') == 'Hello world!\n')
 
 if __name__ == '__main__':

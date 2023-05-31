@@ -127,7 +127,7 @@ void loadELF(const char *filename, rvsim::SymbolInfo &symbolInfo, rvsim::Memory 
       throw std::runtime_error(fmt::format("reading program header {} failed: {}", i, elf_errmsg(-1)));
     }
     if (programHeader.p_type == PT_LOAD) {
-      if (programHeader.p_offset > fileSize) {
+      if (programHeader.p_offset > (unsigned long) fileSize) {
         throw std::runtime_error("invalid ELF program offset");
       }
       uint32_t offset = programHeader.p_paddr - memory.baseAddress;
