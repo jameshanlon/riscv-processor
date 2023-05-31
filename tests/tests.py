@@ -46,8 +46,8 @@ class RVSimTests(unittest.TestCase):
 
     def simulate_with_rvsim(self, elf_filename):
         cmd = [config.RVSIM,
-               '--mem-base', 0x2000,
-               '--mem-size', 0xFFEE00+0x1000000,
+               '--mem-base', str(0x2000),
+               '--mem-size', str(0xFFEE00+0x1000000),
                elf_filename
               ]
         logging.debug(f'{" ".join(str(arg) for arg in cmd)}')
@@ -58,11 +58,19 @@ class RVSimTests(unittest.TestCase):
         self.assertTrue(os.path.exists(config.RISCV_UNKNOWN_ELF_AS))
         self.assertTrue(os.path.exists(config.RISCV_SPIKE))
 
-    def test_hello_world(self):
+    def test_hello_world_spike(self):
         input_filename = Path(config.PROGRAMS_DIR)/'hello_world'/'hello_world.c'
         output_filename = Path(config.BINARY_DIR)/'a.out'
         self.compile_c_program(input_filename, output_filename)
         result = self.simulate_with_spike(output_filename)
+        self.assertTrue(result.stdout.decode('ascii') == 'Hello world!\n')
+
+    def test_hello_world_rvsim(self):
+        input_filename = Path(config.PROGRAMS_DIR)/'hello_world'/'hello_world.c'
+        output_filename = Path(config.BINARY_DIR)/'a.out'
+        self.compile_c_program(input_filename, output_filename)
+        result = self.simulate_with_rvsim(output_filename)
+        print(result)
         self.assertTrue(result.stdout.decode('ascii') == 'Hello world!\n')
 
 if __name__ == '__main__':

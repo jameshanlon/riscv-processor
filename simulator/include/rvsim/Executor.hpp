@@ -31,12 +31,13 @@ enum Opcode {
   SYS    = 0b1110011
 };
 
-enum Ecall {
+enum Syscall {
   READ  = 63,
   WRITE = 64,
   EXIT  = 93
 };
 
+// HTIF memory mapped locations.
 const uint32_t HTIF_TOHOST_ADDRESS   = 0x0002000;
 const uint32_t HTIF_FROMHOST_ADDRESS = 0x0002008;
 
@@ -111,7 +112,7 @@ public:
   }
   int get(int index) {
     if (index >= fileDescs.size()) {
-      throw std::runtime_error("invalid file descriptor");
+      throw Exception("invalid file descriptor");
     } else {
       return fileDescs[index];
     }
@@ -132,7 +133,7 @@ public:
       int stdoutFileDesc = dup(1);
       int stderrFileDesc = dup(2);
       if (stdinFileDesc < 0 || stdoutFileDesc < 0 || stderrFileDesc < 0) {
-        throw std::runtime_error("could not dup stdin/stdout/stderr");
+        throw Exception("could not dup stdin/stdout/stderr");
       }
       fileDescs.add(stdinFileDesc);
       fileDescs.add(stdoutFileDesc);
@@ -181,13 +182,13 @@ public:
       memory.read(toHostCommand, reinterpret_cast<uint8_t*>(htifMem.data()), sizeof(htifMem));
       ssize_t ret;
       switch (htifMem[0]) {
-        case Ecall::EXIT:
+        case Syscall::EXIT:
           throw ExitException(syscallExit<trace>(htifMem.data()));
-        case Ecall::READ:
+        case Syscall::READ:
           ret = syscallRead<trace>(htifMem.data());
           memory.writeMemoryDoubleWord(HTIF_FROMHOST_ADDRESS, ret);
           break;
-        case Ecall::WRITE:
+        case Syscall::WRITE:
           ret = syscallWrite<trace>(htifMem.data());
           memory.writeMemoryDoubleWord(HTIF_FROMHOST_ADDRESS, ret);
           break;
@@ -199,7 +200,7 @@ public:
     /// Load upper immediate.
     template <bool trace>
     void execute_LUI(const InstructionUType &instruction) {
-      auto result = insertBits(0, instruction.imm, 20, 12) & ~0xFFF;
+      auto result = insertBits(0U, instruction.imm, 12, 20) & ~0xFFF;
       state.writeReg(instruction.rd, result);
       TRACE("LUI", RegDst(instruction.rd), ImmValue(instruction.imm));
       TRACE_REG_WRITE(instruction.rd, result);
@@ -209,7 +210,7 @@ public:
     /// Add upper immediate to PC.
     template <bool trace>
     void execute_AUIPC(const InstructionUType &instruction) {
-      auto offset = insertBits(0, instruction.imm, 20, 12) & ~0xFFF;
+      auto offset = insertBits(0U, instruction.imm, 20, 12) & ~0xFFF;
       auto result = state.pc + offset;
       state.writeReg(instruction.rd, result);
       TRACE("AUIPC", RegDst(instruction.rd), ImmValue(instruction.imm));

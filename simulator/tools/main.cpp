@@ -16,6 +16,7 @@
 #include <fmt/core.h>
 
 #include "rvsim/bits.hpp"
+#include "rvsim/Config.hpp"
 #include "rvsim/HartState.hpp"
 #include "rvsim/Memory.hpp"
 #include "rvsim/Executor.hpp"
@@ -28,6 +29,12 @@ const size_t DEFAULT_MEMORY_SIZE_BYTES   = 0x10000*4; // 1 KB
 #ifndef EM_RISCV
 #define EM_RISCV (243)
 #endif
+
+#define PRINT_INFO(x) \
+  if (rvsim::Config::getInstance().verbose) { \
+    std::cout << x; \
+  }
+
 
 static void help(const char *argv[]) {
   std::cout << "RISC-V (R32IM) simulator\n";
@@ -128,7 +135,7 @@ void loadELF(const char *filename, rvsim::SymbolInfo &symbolInfo, rvsim::Memory 
         throw std::runtime_error(fmt::format("data from ELF program header {} does not fit in memory", i));
       }
       std::memcpy(memory.data() + offset, elfContentsPtr + programHeader.p_offset, programHeader.p_filesz);
-      std::cout << fmt::format("Loaded {} bytes into memory\n", programHeader.p_filesz);
+      PRINT_INFO(fmt::format("Loaded {} bytes into memory\n", programHeader.p_filesz));
     }
   }
 
@@ -145,7 +152,7 @@ void loadELF(const char *filename, rvsim::SymbolInfo &symbolInfo, rvsim::Memory 
   // Read the symbol data.
   Elf_Data *data = elf_getdata(section, nullptr);
   if (data == nullptr) {
-    std::cout << "No ELF symbol data\n";
+    PRINT_INFO("No ELF symbol data\n");
   } else {
     size_t count = sectionHeader.sh_size / sectionHeader.sh_entsize;
     for (size_t i = 0; i < count; i++) {
@@ -178,6 +185,9 @@ int main(int argc, const char *argv[]) {
         memBase = std::stoull(argv[++i]);
       } else if (std::strcmp(argv[i], "--mem-size") == 0) {
         memSize = std::stoull(argv[++i]);
+      } else if (std::strcmp(argv[i], "-v") == 0 ||
+                 std::strcmp(argv[i], "--verbose") == 0) {
+        rvsim::Config::getInstance().verbose = true;
       } else if (std::strcmp(argv[i], "-h") == 0 ||
                  std::strcmp(argv[i], "--help") == 0) {
         help(argv);
