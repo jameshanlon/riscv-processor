@@ -1,6 +1,6 @@
-# RISC-V Simulator
+# RISC-V Processor
 
-WIP
+A C++ simulator and SystemVerilog implementation of the RISC-V 32IM architecture.
 
 ## Build the simulator
 
@@ -24,14 +24,14 @@ $ make install
 
 ```
 $ make -C tests/hello_world
-$ ./build/rvsim tests/hello_world/hello_world.elf
-Hello world
+$ ./build/rvsim --mem-base 8192 --mem-size 33549824 tests/hello_world/hello_world.elf
+Hello world!
 ```
 
 Or using Spike for reference:
 ```
-$ spike --isa=RV32IM -m0x100000:0x100000 tests/hello_world/hello_world.elf
-Hello world
+$ spike --isa=RV32IM -m0x00002000:0xFFE000,0x1000000:0x1000000 tests/hello_world/hello_world.elf
+Hello world!
 ```
 
 ## Build the RISC-V tooling
@@ -47,9 +47,9 @@ Build GNU toolchain, RISC-V PK and Spike:
 $ bash build_riscv_tooling.sh
 ```
 
-Test it all works:
+Test it all works (requires `pk`):
 ```
-$ export RISCV=`pwd`/install
+$ export RISCV=`pwd`/riscv_tooling/install
 $ export PATH=$RISCV/bin:$PATH
 $ echo -e '#include <stdio.h>\n int main(void) { printf("Hello world"); return 0; }' > hello.c
 $ riscv32-unknown-elf-gcc hello.c -o hello
@@ -60,9 +60,10 @@ Hello world%
 
 ## Licensing
 
-This repository contains code from [lowRISC/RISC-V Embedded PIC
-Demo](https://github.com/lowRISC/epic-c-example) licensed under the Apache 2.0
-license, and [Tock OS project](https://github.com/tock/libtock-c)
+This repository contains code in `runtime/` from the
+[lowRISC/RISC-V Embedded PIC Demo](https://github.com/lowRISC/epic-c-example)
+licensed under the Apache 2.0 license, and
+[Tock OS project](https://github.com/tock/libtock-c)
 licensed under either the Apache 2.0 or MIT licenses.
 
 Unless otherwise noted, all code in this repository is licensed under the
