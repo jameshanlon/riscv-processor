@@ -1,0 +1,14 @@
+[RISCOF]
+ReferencePlugin=spike
+ReferencePluginPath=${CMAKE_CURRENT_SOURCE_DIR}/spike
+DUTPlugin=rvsim
+DUTPluginPath=${CMAKE_CURRENT_SOURCE_DIR}/rvsim
+
+[rvsim]
+pluginpath=${CMAKE_CURRENT_SOURCE_DIR}/rvsim
+ispec=${CMAKE_CURRENT_SOURCE_DIR}/rvsim/rvsim_isa.yaml
+pspec=${CMAKE_CURRENT_SOURCE_DIR}/rvsim/rvsim_platform.yaml
+target_run=1
+
+[spike]
+pluginpath=${CMAKE_CURRENT_SOURCE_DIR}/spike

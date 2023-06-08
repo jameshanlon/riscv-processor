@@ -58,6 +58,26 @@ bbl loader
 Hello world%
 ```
 
+## Run the RISC-V architectural tests
+
+
+Instructions on setting up and running these using RISCOF:
+
+  https://riscof.readthedocs.io/en/stable/installation.html
+
+Clone the architectural tests:
+```
+$ riscof --verbose info arch-test --clone
+```
+
+Run the tests:
+```
+$ riscof --verbose info run \
+    --config ./build/tests/riscof/rvsim-config.ini \
+    --suite ./riscv-arch-test/riscv-test-suite/rv32i_m \
+    --env ./riscv-arch-test/riscv-test-suite/env
+```
+
 ## Licensing
 
 This repository contains code in `runtime/` from the

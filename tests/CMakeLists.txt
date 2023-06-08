@@ -26,3 +26,6 @@ configure_file(tests.py ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
 
 add_test(NAME tests.py
          COMMAND ${_Python_EXECUTABLE} tests.py)
+
+# Riscof
+add_subdirectory(riscof)
