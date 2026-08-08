@@ -1,0 +1,15 @@
+# ACT4 framework configuration for rvsim.
+#
+# Spike is used as the reference model rather than Sail, because
+# build_riscv_tooling.sh already builds it. The framework infers the model type
+# from the name of the executable.
+name: rvsim
+compiler_exe: riscv32-unknown-elf-gcc # ACT4 requires GCC 15 or later
+objdump_exe: riscv32-unknown-elf-objdump
+ref_model_exe: spike
+udb_config: rvsim.yaml
+linker_script: link.ld
+dut_include_dir: . # Directory holding rvmodel_macros.h
+# rvsim implements machine mode only, with no PMP, counters or delegation, so
+# the privileged tests are not run yet.
+include_priv_tests: false

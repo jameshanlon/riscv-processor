@@ -58,7 +58,7 @@ bbl loader
 Hello world%
 ```
 
-## Run the RISC-V architectural tests
+## Run the RISC-V architectural tests (RISCOF, ACT 3.10)
 
 The architectural tests are run with [RISCOF](https://riscof.readthedocs.io/en/stable/installation.html),
 which compiles each test for both `rvsim` and Spike and compares the signatures
@@ -88,15 +88,54 @@ $ riscof --verbose info run \
 
 `rvsim` implements RV32I only, so `tests/riscof/rvsim/rvsim_isa.yaml` declares
 just the base integer instruction set and RISCOF selects the 41 tests that
-apply to it. Extending the simulator with the M, C or Zicsr extensions means
-updating the `ISA` and `misa` fields of that file to match, so that the tests
-covering them are selected too.
+apply to it. Extending the simulator with the M or C extensions means updating
+the `ISA` and `misa` fields of that file to match, so that the tests covering
+them are selected too.
 
 The tests are linked at `0x80000000` by `tests/riscof/rvsim/env/link.ld`, and
 `tests/riscof/rvsim/riscof_rvsim.py` sizes the simulated memory to match. On
 termination the DUT plugin has `rvsim` write the region between the
 `begin_signature` and `end_signature` symbols to a signature file, in the same
 format as Spike.
+
+## Run the RISC-V architectural tests (ACT 4.0)
+
+ACT 4.0 replaces RISCOF with its own framework. Rather than comparing a
+signature against a reference model after the fact, it uses the reference model
+at build time to compute the expected results, and compiles them into
+self-checking ELFs that report a pass or a failure on the console. The DUT is
+then only responsible for running each ELF.
+
+`tests/act4/rvsim` holds the configuration describing `rvsim` to the framework:
+
+  * `rvsim.yaml`, a [RISC-V Unified Database](https://github.com/riscv/riscv-unified-db)
+    configuration listing the implemented extensions and their parameters, from
+    which the framework decides which tests apply. Note that a configuration
+    cannot describe a hart without machine mode: `MXLEN` itself is a parameter
+    of the `Sm` extension, which is why the simulator needed the CSRs and traps
+    before this could be written.
+  * `rvmodel_macros.h`, defining how a test terminates and writes to the
+    console. Both go through `rvsim`'s HTIF interface, the same one the runtime
+    in `runtime/` uses.
+  * `link.ld` and `run_cmd.txt`, which between them fix the memory map. The
+    `--mem-base` and `--mem-size` in the latter must match `RAM_ORIGIN` and
+    `RAM_LENGTH` in the former.
+  * `test_config.yaml`, naming the toolchain and the reference model. Spike is
+    used rather than Sail, since `build_riscv_tooling.sh` already builds it.
+
+Build the tests and run them, from a checkout of the tests (requires the RISC-V
+toolchain, Spike and `uv` on `PATH`):
+```
+$ git clone https://github.com/riscv-non-isa/riscv-arch-test.git
+$ cd riscv-arch-test
+$ make elfs CONFIG_FILES=<path to>/tests/act4/rvsim/test_config.yaml EXTENSIONS=I
+$ ./run_tests.py "$(cat <path to>/tests/act4/rvsim/run_cmd.txt)" work/rvsim/elfs
+```
+
+This flow has not yet been run end to end. The UDB configuration validates with
+`udb validate cfg`, and the framework accepts `test_config.yaml`, but building
+the ELFs needs GCC 15 and Spike, which is what `build_riscv_tooling.sh` now
+provides. Expect the DUT macros to need adjustment on the first real run.
 
 ## Licensing
 

@@ -1,0 +1,1 @@
+rvsim --mem-base 0x80000000 --mem-size 0x1000000 --max-cycles 100000000
