@@ -60,23 +60,43 @@ Hello world%
 
 ## Run the RISC-V architectural tests
 
+The architectural tests are run with [RISCOF](https://riscof.readthedocs.io/en/stable/installation.html),
+which compiles each test for both `rvsim` and Spike and compares the signatures
+that the two produce.
 
-Instructions on setting up and running these using RISCOF:
-
-  https://riscof.readthedocs.io/en/stable/installation.html
-
-Clone the architectural tests:
+Install RISCOF:
 ```
-$ riscof --verbose info arch-test --clone
+$ pip install riscof
 ```
 
-Run the tests:
+Clone the architectural tests. Note that the default branch of the upstream
+repository now holds the ACT 4.0 framework, which replaces RISCOF and has a
+different directory layout, so `riscof arch-test --clone` does not produce a
+usable suite. Use the last RISCOF-compatible release (3.10.0) instead, which is
+maintained on the `old-framework-3.x` branch:
+```
+$ git clone -b old-framework-3.x https://github.com/riscv-non-isa/riscv-arch-test.git
+```
+
+Run the tests (requires the RISC-V toolchain and Spike on `PATH`):
 ```
 $ riscof --verbose info run \
     --config ./build/tests/riscof/rvsim-config.ini \
     --suite ./riscv-arch-test/riscv-test-suite/rv32i_m \
     --env ./riscv-arch-test/riscv-test-suite/env
 ```
+
+`rvsim` implements RV32I only, so `tests/riscof/rvsim/rvsim_isa.yaml` declares
+just the base integer instruction set and RISCOF selects the 41 tests that
+apply to it. Extending the simulator with the M, C or Zicsr extensions means
+updating the `ISA` and `misa` fields of that file to match, so that the tests
+covering them are selected too.
+
+The tests are linked at `0x80000000` by `tests/riscof/rvsim/env/link.ld`, and
+`tests/riscof/rvsim/riscof_rvsim.py` sizes the simulated memory to match. On
+termination the DUT plugin has `rvsim` write the region between the
+`begin_signature` and `end_signature` symbols to a signature file, in the same
+format as Spike.
 
 ## Licensing
 

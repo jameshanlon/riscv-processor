@@ -25,6 +25,7 @@
 
 const size_t DEFAULT_MEMORY_BASE_ADDRESS = 0x10000;
 const size_t DEFAULT_MEMORY_SIZE_BYTES   = 0x10000*4; // 1 KB
+const size_t DEFAULT_SIGNATURE_GRANULARITY = 4;
 
 #ifndef EM_RISCV
 #define EM_RISCV (243)
@@ -50,9 +51,49 @@ static void help(const char *argv[]) {
   std::cout << "  --max-cycles N  Limit the number of simulation cycles (default: 0)\n";
   std::cout << "  --mem-base B    Set the memory base address in bytes (default: " << DEFAULT_MEMORY_BASE_ADDRESS << ")\n";
   std::cout << "  --mem-size B    Set the memory size in bytes (default: " << DEFAULT_MEMORY_SIZE_BYTES << ")\n";
+  std::cout << "  --signature F   Write the test signature to file F on termination\n";
+  std::cout << "  --signature-granularity N\n";
+  std::cout << "                  Set the signature line size in bytes (default: " << DEFAULT_SIGNATURE_GRANULARITY << ")\n";
 }
 
-void loadELF(const char *filename, rvsim::SymbolInfo &symbolInfo, rvsim::Memory &memory) {
+/// Write the memory between the begin_signature and end_signature symbols to a
+/// file, in the format expected by RISCOF. Each line holds one granule of
+/// bytes, most-significant byte first, and a trailing partial granule is padded
+/// with zeros. This matches the output of Spike so that the two signatures can
+/// be compared directly.
+void writeSignature(const char *filename, rvsim::SymbolInfo &symbolInfo,
+                    rvsim::Memory &memory, size_t granularity) {
+  auto *beginSymbol = symbolInfo.getSymbol("begin_signature");
+  auto *endSymbol = symbolInfo.getSymbol("end_signature");
+  if (beginSymbol == nullptr || endSymbol == nullptr) {
+    throw std::runtime_error("ELF file does not define begin_signature and end_signature");
+  }
+  if (endSymbol->value < beginSymbol->value) {
+    throw std::runtime_error("end_signature precedes begin_signature");
+  }
+  size_t length = endSymbol->value - beginSymbol->value;
+  std::vector<uint8_t> signature(length);
+  memory.read(beginSymbol->value, signature.data(), length);
+  std::ofstream file(filename);
+  if (!file) {
+    throw std::runtime_error(fmt::format("could not open signature file {}", filename));
+  }
+  for (size_t i = 0; i < length; i += granularity) {
+    for (size_t j = granularity; j > 0; j--) {
+      if (i + j <= length) {
+        file << fmt::format("{:02x}", signature[i + j - 1]);
+      } else {
+        file << "00";
+      }
+    }
+    file << '\n';
+  }
+  PRINT_INFO(fmt::format("Wrote {} bytes of signature to {}\n", length, filename));
+}
+
+/// Load an ELF file into memory, populate the symbol table and return the
+/// entry point address recorded in the ELF header.
+uint32_t loadELF(const char *filename, rvsim::SymbolInfo &symbolInfo, rvsim::Memory &memory) {
 
   // Load the binary file.
   std::streampos fileSize;
@@ -159,11 +200,15 @@ void loadELF(const char *filename, rvsim::SymbolInfo &symbolInfo, rvsim::Memory 
       GElf_Sym symbol;
       gelf_getsym(data, i, &symbol);
       const char *name = elf_strptr(elf, sectionHeader.sh_link, symbol.st_name);
-      symbolInfo.addSymbol(name, symbol.st_value, symbol.st_info);
+      symbolInfo.addSymbol(name ? name : "", symbol.st_value, symbol.st_info);
     }
   }
 
+  uint32_t entryPoint = header->e_entry;
+
   elf_end(elf);
+
+  return entryPoint;
 }
 
 int main(int argc, const char *argv[]) {
@@ -174,17 +219,26 @@ int main(int argc, const char *argv[]) {
     size_t maxCycles = 0;
     size_t memBase = DEFAULT_MEMORY_BASE_ADDRESS;
     size_t memSize = DEFAULT_MEMORY_SIZE_BYTES;
+    const char *signatureFilename = nullptr;
+    size_t signatureGranularity = DEFAULT_SIGNATURE_GRANULARITY;
     // Parse the command line.
     for (int i = 1; i < argc; ++i) {
       if (std::strcmp(argv[i], "-t") == 0 ||
           std::strcmp(argv[i], "--trace") == 0) {
         trace = true;
       } else if (std::strcmp(argv[i], "--max-cycles") == 0) {
-        maxCycles = std::stoull(argv[++i]);
+        maxCycles = std::stoull(argv[++i], nullptr, 0);
       } else if (std::strcmp(argv[i], "--mem-base") == 0) {
-        memBase = std::stoull(argv[++i]);
+        memBase = std::stoull(argv[++i], nullptr, 0);
       } else if (std::strcmp(argv[i], "--mem-size") == 0) {
-        memSize = std::stoull(argv[++i]);
+        memSize = std::stoull(argv[++i], nullptr, 0);
+      } else if (std::strcmp(argv[i], "--signature") == 0) {
+        signatureFilename = argv[++i];
+      } else if (std::strcmp(argv[i], "--signature-granularity") == 0) {
+        signatureGranularity = std::stoull(argv[++i], nullptr, 0);
+        if (signatureGranularity == 0) {
+          throw std::runtime_error("signature granularity must be non zero");
+        }
       } else if (std::strcmp(argv[i], "-v") == 0 ||
                  std::strcmp(argv[i], "--verbose") == 0) {
         rvsim::Config::getInstance().verbose = true;
@@ -211,21 +265,45 @@ int main(int argc, const char *argv[]) {
     rvsim::Memory memory(memBase, memSize);
     rvsim::Executor executor(state, memory);
     // Load the ELF file.
-    loadELF(filename, symbolInfo, memory);
-    state.pc = symbolInfo.getSymbol("_start")->value;
-    // Step the model.
-    while (true) {
-      if (trace) {
-        executor.step<true>();
-      } else {
-        executor.step<false>();
-      }
-      if (maxCycles > 0 && state.cycleCount == maxCycles) {
-        break;
-      }
+    auto entryPoint = loadELF(filename, symbolInfo, memory);
+    // Begin execution at _start when the program defines it, otherwise use the
+    // entry point from the ELF header. The architectural tests, for example,
+    // enter at rvtest_entry_point.
+    if (auto *startSymbol = symbolInfo.getSymbol("_start")) {
+      state.pc = startSymbol->value;
+    } else {
+      state.pc = entryPoint;
     }
-  } catch (rvsim::ExitException &e) {
-    return e.returnValue;
+    // Locate the HTIF words, which are placed differently by each linker
+    // script, falling back on the default addresses when they are not defined.
+    if (auto *toHostSymbol = symbolInfo.getSymbol("tohost")) {
+      auto *fromHostSymbol = symbolInfo.getSymbol("fromhost");
+      executor.setHTIFAddresses(toHostSymbol->value,
+                                fromHostSymbol ? fromHostSymbol->value
+                                               : toHostSymbol->value + 8);
+    }
+    // Step the model.
+    int exitCode = 0;
+    try {
+      while (true) {
+        if (trace) {
+          executor.step<true>();
+        } else {
+          executor.step<false>();
+        }
+        if (maxCycles > 0 && state.cycleCount == maxCycles) {
+          break;
+        }
+      }
+    } catch (rvsim::ExitException &e) {
+      exitCode = e.returnValue;
+    }
+    // Report the contents of the signature region, which the architectural
+    // tests compare against a reference model.
+    if (signatureFilename) {
+      writeSignature(signatureFilename, symbolInfo, memory, signatureGranularity);
+    }
+    return exitCode;
   } catch (rvsim::Exception &e) {
     std::cerr << e.what() << "\n";
     return 1;

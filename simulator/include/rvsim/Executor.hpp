@@ -37,7 +37,8 @@ enum Syscall {
   EXIT  = 93
 };
 
-// HTIF memory mapped locations.
+// Default HTIF memory mapped locations, used when the ELF file does not
+// define the tohost and fromhost symbols.
 const uint32_t HTIF_TOHOST_ADDRESS   = 0x0002000;
 const uint32_t HTIF_FROMHOST_ADDRESS = 0x0002008;
 
@@ -126,9 +127,13 @@ public:
     HartState &state;
     Memory &memory;
     FileDescriptors fileDescs;
+    uint32_t toHostAddress;
+    uint32_t fromHostAddress;
 
     Executor(HartState &state, Memory &memory)
-        : state(state), memory(memory) {
+        : state(state), memory(memory),
+          toHostAddress(HTIF_TOHOST_ADDRESS),
+          fromHostAddress(HTIF_FROMHOST_ADDRESS) {
       int stdinFileDesc = dup(0);
       int stdoutFileDesc = dup(1);
       int stderrFileDesc = dup(2);
@@ -138,6 +143,15 @@ public:
       fileDescs.add(stdinFileDesc);
       fileDescs.add(stdoutFileDesc);
       fileDescs.add(stderrFileDesc);
+    }
+
+    /// Set the locations of the HTIF tohost and fromhost words, which vary
+    /// with the linker script used to build the program.
+    void setHTIFAddresses(uint32_t toHost, uint32_t fromHost) {
+      assert(!(toHost & 0x7) && "misaligned tohost address");
+      assert(!(fromHost & 0x7) && "misaligned fromhost address");
+      toHostAddress = toHost;
+      fromHostAddress = fromHost;
     }
 
     template<bool trace>
@@ -186,11 +200,11 @@ public:
           throw ExitException(syscallExit<trace>(htifMem.data()));
         case Syscall::READ:
           ret = syscallRead<trace>(htifMem.data());
-          memory.writeMemoryDoubleWord(HTIF_FROMHOST_ADDRESS, ret);
+          memory.writeMemoryDoubleWord(fromHostAddress, ret);
           break;
         case Syscall::WRITE:
           ret = syscallWrite<trace>(htifMem.data());
-          memory.writeMemoryDoubleWord(HTIF_FROMHOST_ADDRESS, ret);
+          memory.writeMemoryDoubleWord(fromHostAddress, ret);
           break;
         default:
           throw UnknownSyscallException(htifMem[0]);
@@ -238,8 +252,7 @@ public:
     void execute_JALR(const InstructionIType &instruction) {
       auto base = state.readReg(instruction.rs1);
       auto imm = signExtend(instruction.imm, 12);
-      auto offset = imm << 1;
-      auto targetPC = (base + offset) & ~1U;
+      auto targetPC = (base + imm) & ~1U;
       auto result = state.pc + 4;
       state.writeReg(instruction.rd, result);
       state.pc = targetPC;
@@ -262,12 +275,14 @@ public:
         TRACE_END(); \
       }
 
+    // The 12-bit immediate is sign extended by every OP-IMM instruction,
+    // including SLTIU, which then performs an unsigned comparison against it.
     OP_IMM_ITYPE_INSTR(ADDI,  signExtend(instruction.imm, 12), rs1 + imm)
-    OP_IMM_ITYPE_INSTR(XORI,  instruction.imm, rs1 ^ imm)
-    OP_IMM_ITYPE_INSTR(ORI,   instruction.imm, rs1 | imm)
-    OP_IMM_ITYPE_INSTR(ANDI,  instruction.imm, rs1 & imm)
-    OP_IMM_ITYPE_INSTR(SLTI,  signExtend(instruction.imm, 12), rs1 < imm ? 1 : 0)
-    OP_IMM_ITYPE_INSTR(SLTIU, instruction.imm, rs1 < imm ? 1 : 0)
+    OP_IMM_ITYPE_INSTR(XORI,  signExtend(instruction.imm, 12), rs1 ^ imm)
+    OP_IMM_ITYPE_INSTR(ORI,   signExtend(instruction.imm, 12), rs1 | imm)
+    OP_IMM_ITYPE_INSTR(ANDI,  signExtend(instruction.imm, 12), rs1 & imm)
+    OP_IMM_ITYPE_INSTR(SLTI,  signExtend(instruction.imm, 12), static_cast<int32_t>(rs1) < static_cast<int32_t>(imm) ? 1 : 0)
+    OP_IMM_ITYPE_INSTR(SLTIU, signExtend(instruction.imm, 12), rs1 < imm ? 1 : 0)
 
     #define OP_IMM_SHAMT_INSTR(mnemonic, expression) \
       template <bool trace> \
@@ -298,9 +313,10 @@ public:
 
     OP_REG_RTYPE_INSTR(ADD,  rs1 + rs2)
     OP_REG_RTYPE_INSTR(SUB,  rs1 - rs2)
-    OP_REG_RTYPE_INSTR(SLL,  rs1 << rs2)
-    OP_REG_RTYPE_INSTR(SRL,  rs1 >> rs2)
-    OP_REG_RTYPE_INSTR(SRA,  static_cast<int32_t>(rs1) >> rs2)
+    // Only the low five bits of the shift amount are used on RV32.
+    OP_REG_RTYPE_INSTR(SLL,  rs1 << (rs2 & 0x1F))
+    OP_REG_RTYPE_INSTR(SRL,  rs1 >> (rs2 & 0x1F))
+    OP_REG_RTYPE_INSTR(SRA,  static_cast<int32_t>(rs1) >> (rs2 & 0x1F))
     OP_REG_RTYPE_INSTR(OR,   rs1 | rs2)
     OP_REG_RTYPE_INSTR(AND,  rs1 & rs2)
     OP_REG_RTYPE_INSTR(XOR,  rs1 ^ rs2)
@@ -312,7 +328,7 @@ public:
       void execute_##mnemonic(const InstructionBType &instruction) { \
         auto rs1 = state.readReg(instruction.rs1); \
         auto rs2 = state.readReg(instruction.rs2); \
-        auto imm = signExtend(instruction.imm, 12); \
+        auto imm = signExtend(instruction.imm, 13); \
         auto offset = imm; \
         TRACE(STR(mnemonic), RegSrc(instruction.rs1), RegSrc(instruction.rs2), ImmValue(imm)); \
         if (expression) { \
@@ -495,11 +511,11 @@ public:
       auto fetchData = memory.readMemoryWord(state.pc);
       state.fetchAddress = state.pc;
       dispatchInstruction<trace>(fetchData);
-      auto toHostCommand = memory.readMemoryDoubleWord(HTIF_TOHOST_ADDRESS);
+      auto toHostCommand = memory.readMemoryDoubleWord(toHostAddress);
       if (toHostCommand != 0) {
         handleSyscall<trace>(toHostCommand);
         // Clear the syscall.
-        memory.writeMemoryDoubleWord(HTIF_TOHOST_ADDRESS, 0);
+        memory.writeMemoryDoubleWord(toHostAddress, 0);
       }
       if (!state.branchTaken) {
         state.pc += 4;
