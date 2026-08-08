@@ -1,11 +1,14 @@
 hart_ids: [0]
 hart0:
-  ISA: RV32IMCZicsr_Zifencei
+  # rvsim currently implements the base integer instruction set only. The M, C
+  # and Zicsr extensions are not decoded, so they must not be advertised here
+  # or RISCOF will select tests that the simulator cannot execute.
+  ISA: RV32I
   physical_addr_sz: 32
   User_Spec_Version: '2.3'
   supported_xlen: [32]
   misa:
-   reset-val: 0x40001104
+   reset-val: 0x40000100
    rv32:
      accessible: true
      mxl:
@@ -23,6 +26,6 @@ hart0:
            warl:
               dependency_fields: []
               legal:
-                - extensions[25:0] bitmask [0x0001104, 0x0000000]
+                - extensions[25:0] bitmask [0x0000100, 0x0000000]
               wr_illegal:
                 - Unchanged

@@ -15,11 +15,19 @@ from riscof.pluginTemplate import pluginTemplate
 
 logger = logging.getLogger()
 
+# The base address and size of the memory that rvsim provides to a test. These
+# must cover the addresses used by env/link.ld.
+MEMORY_BASE_ADDRESS = 0x80000000
+MEMORY_SIZE_BYTES = 0x400000
+
+# An upper bound on the length of a test, so that a test that fails to
+# terminate is reported as a signature mismatch rather than hanging the run.
+MAX_CYCLES = 10000000
+
 class rvsim(pluginTemplate):
     __model__ = "rvsim"
 
-    #TODO: please update the below to indicate family, version, etc of your DUT.
-    __version__ = "XXX"
+    __version__ = "0.1.0"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -154,8 +162,9 @@ class rvsim(pluginTemplate):
 	  # the "else" clause is executed below assigning the sim command to simple no action
 	  # echo statement.
           if self.target_run:
-            # set up the simulation command. Template is for spike. Please change.
-            simcmd = self.dut_exe + ' --isa={0} +signature={1} +signature-granularity=4 {2}'.format(self.isa, sig_file, elf)
+            # set up the simulation command.
+            simcmd = self.dut_exe + ' --mem-base {0} --mem-size {1} --max-cycles {2} --signature {3} --signature-granularity 4 {4}'.format(
+                hex(MEMORY_BASE_ADDRESS), hex(MEMORY_SIZE_BYTES), MAX_CYCLES, sig_file, elf)
           else:
             simcmd = 'echo "NO RUN"'
 
