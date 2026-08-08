@@ -58,14 +58,13 @@ struct UnknownSyscallException : public Exception {
     : Exception(std::string("unknown syscall: ")+std::to_string(value)) {}
 };
 
-struct UnknownOpcodeException : public Exception {
-  UnknownOpcodeException(std::string name)
-    : Exception(std::string("unknown opcode: "+name)) {}
-};
-
-struct UnknownSysImmException : public Exception {
-  UnknownSysImmException(uint32_t value)
-    : Exception(std::string("unknown sys immediate: ")+std::to_string(value)) {}
+/// A synchronous exception raised by an instruction. It is thrown before the
+/// instruction has any architectural effect, and caught by the step loop, which
+/// performs the trap entry.
+struct TrapSignal {
+  uint32_t cause;
+  uint32_t tval;
+  TrapSignal(uint32_t cause, uint32_t tval = 0) : cause(cause), tval(tval) {}
 };
 
 #define TRACE(...) \
@@ -237,9 +236,14 @@ public:
     void execute_JAL(const InstructionJType &instruction) {
       auto imm = signExtend(instruction.imm, 21);
       auto offset = imm;
+      auto targetPC = state.pc + offset;
+      // IALIGN is 32, since the C extension is not implemented.
+      if (targetPC & 0x3) {
+        throw TrapSignal(INSTRUCTION_ADDRESS_MISALIGNED, targetPC);
+      }
       auto result = state.pc + 4;
       state.writeReg(instruction.rd, result);
-      state.pc += offset;
+      state.pc = targetPC;
       state.branchTaken = true;
       TRACE("JAL", RegDst(instruction.rd), ImmValue(instruction.imm));
       TRACE_REG_WRITE(instruction.rd, result);
@@ -253,6 +257,10 @@ public:
       auto base = state.readReg(instruction.rs1);
       auto imm = signExtend(instruction.imm, 12);
       auto targetPC = (base + imm) & ~1U;
+      // IALIGN is 32, since the C extension is not implemented.
+      if (targetPC & 0x3) {
+        throw TrapSignal(INSTRUCTION_ADDRESS_MISALIGNED, targetPC);
+      }
       auto result = state.pc + 4;
       state.writeReg(instruction.rd, result);
       state.pc = targetPC;
@@ -332,7 +340,11 @@ public:
         auto offset = imm; \
         TRACE(STR(mnemonic), RegSrc(instruction.rs1), RegSrc(instruction.rs2), ImmValue(imm)); \
         if (expression) { \
-          state.pc += offset; \
+          auto targetPC = state.pc + offset; \
+          if (targetPC & 0x3) { \
+            throw TrapSignal(INSTRUCTION_ADDRESS_MISALIGNED, targetPC); \
+          } \
+          state.pc = targetPC; \
           state.branchTaken = true; \
           TRACE_REG_WRITE(Register::pc, state.pc); \
         } \
@@ -346,28 +358,34 @@ public:
     BRANCH_BTYPE_INSTR(BLTU, rs1 < rs2)
     BRANCH_BTYPE_INSTR(BGEU, rs1 >= rs2)
 
-    #define STORE_STYPE_INSTR(mnemonic, memory_function) \
+    #define STORE_STYPE_INSTR(mnemonic, memory_function, alignment_mask) \
       template <bool trace> \
       void execute_##mnemonic(const InstructionSType &instruction) { \
         auto base = state.readReg(instruction.rs1); \
         auto offset = signExtend(instruction.imm, 12); \
         auto effectiveAddr = base + offset; \
+        if (effectiveAddr & alignment_mask) { \
+          throw TrapSignal(STORE_ADDRESS_MISALIGNED, effectiveAddr); \
+        } \
         memory.memory_function(effectiveAddr, state.readReg(instruction.rs2)); \
         TRACE(STR(mnemonic), RegSrc(instruction.rs2), RegSrc(instruction.rs1), ImmValue(offset)); \
         TRACE_MEM_WRITE(effectiveAddr, state.readReg(instruction.rs2)); \
         TRACE_END(); \
       }
 
-    STORE_STYPE_INSTR(SB, writeMemoryByte)
-    STORE_STYPE_INSTR(SH, writeMemoryHalf)
-    STORE_STYPE_INSTR(SW, writeMemoryWord)
+    STORE_STYPE_INSTR(SB, writeMemoryByte, 0x0)
+    STORE_STYPE_INSTR(SH, writeMemoryHalf, 0x1)
+    STORE_STYPE_INSTR(SW, writeMemoryWord, 0x3)
 
-    #define LOAD_ITYPE_INSTR(mnemonic, memory_function, result_expression) \
+    #define LOAD_ITYPE_INSTR(mnemonic, memory_function, result_expression, alignment_mask) \
       template <bool trace> \
       void execute_##mnemonic(const InstructionIType &instruction) { \
         auto base = state.readReg(instruction.rs1); \
         auto offset = signExtend(instruction.imm, 12); \
         auto effectiveAddr = base + offset; \
+        if (effectiveAddr & alignment_mask) { \
+          throw TrapSignal(LOAD_ADDRESS_MISALIGNED, effectiveAddr); \
+        } \
         auto result = memory.memory_function(effectiveAddr); \
         result = result_expression; \
         TRACE(STR(mnemonic), RegDst(instruction.rd), RegSrc(instruction.rs1), ImmValue(offset)); \
@@ -376,22 +394,85 @@ public:
         TRACE_END(); \
       }
 
-    LOAD_ITYPE_INSTR(LB,  readMemoryByte, signExtend(result, 8))
-    LOAD_ITYPE_INSTR(LH,  readMemoryHalf, signExtend(result, 16))
-    LOAD_ITYPE_INSTR(LW,  readMemoryWord, result)
-    LOAD_ITYPE_INSTR(LBU, readMemoryByte, result)
-    LOAD_ITYPE_INSTR(LHU, readMemoryHalf, result)
+    LOAD_ITYPE_INSTR(LB,  readMemoryByte, signExtend(result, 8),  0x0)
+    LOAD_ITYPE_INSTR(LH,  readMemoryHalf, signExtend(result, 16), 0x1)
+    LOAD_ITYPE_INSTR(LW,  readMemoryWord, result,                 0x3)
+    LOAD_ITYPE_INSTR(LBU, readMemoryByte, result,                 0x0)
+    LOAD_ITYPE_INSTR(LHU, readMemoryHalf, result,                 0x1)
 
     /// Environment call.
     template <bool trace>
     void execute_ECALL(const InstructionIType &instruction) {
-      // Unimplemented.
+      TRACE("ECALL");
+      TRACE_END();
+      throw TrapSignal(ENVIRONMENT_CALL_FROM_M);
     }
 
     /// Environment break.
     template <bool trace>
     void execute_EBREAK(const InstructionIType &instruction) {
-      // Unimplemented.
+      TRACE("EBREAK");
+      TRACE_END();
+      throw TrapSignal(BREAKPOINT);
+    }
+
+    /// Return from a machine-mode trap.
+    template <bool trace>
+    void execute_MRET(const InstructionIType &instruction) {
+      // Restore the interrupt enable from its saved value. MPP is left at
+      // machine mode, which is the only privilege level implemented.
+      auto mpie = (state.csrs.mstatus & MSTATUS_MPIE) != 0;
+      state.csrs.mstatus &= ~MSTATUS_MIE;
+      if (mpie) {
+        state.csrs.mstatus |= MSTATUS_MIE;
+      }
+      state.csrs.mstatus |= MSTATUS_MPIE;
+      state.pc = state.csrs.mepc;
+      state.branchTaken = true;
+      TRACE("MRET");
+      TRACE_REG_WRITE(Register::pc, state.pc);
+      TRACE_END();
+    }
+
+    /// The CSR instructions. The source operand is a register for the CSRRW,
+    /// CSRRS and CSRRC forms, and a five bit zero extended immediate for the
+    /// CSRRWI, CSRRSI and CSRRCI forms.
+    ///
+    /// A write is suppressed when CSRRS or CSRRC is given a zero source, and a
+    /// read is suppressed when CSRRW writes to x0, so that neither triggers the
+    /// side effects of the access it is not making.
+    template <bool trace, bool immediateForm>
+    void executeCSR(const InstructionIType &instruction, unsigned operation) {
+      auto address = instruction.imm;
+      auto source = immediateForm ? uint32_t(instruction.rs1)
+                                  : state.readReg(instruction.rs1);
+      bool sourceIsZero = instruction.rs1 == 0;
+      // CSRRW always writes, the set and clear forms only when the source is
+      // non zero.
+      bool writing = (operation == 0b01) || !sourceIsZero;
+      if (writing && CSRs::isReadOnly(address)) {
+        throw TrapSignal(ILLEGAL_INSTRUCTION);
+      }
+      uint32_t value = 0;
+      bool reading = (operation != 0b01) || instruction.rd != 0;
+      if (reading && !state.csrs.read(address, value)) {
+        throw TrapSignal(ILLEGAL_INSTRUCTION);
+      }
+      if (writing) {
+        uint32_t result = value;
+        switch (operation) {
+          case 0b01: result = source; break;        // CSRRW
+          case 0b10: result = value | source; break; // CSRRS
+          case 0b11: result = value & ~source; break; // CSRRC
+        }
+        if (!state.csrs.write(address, result)) {
+          throw TrapSignal(ILLEGAL_INSTRUCTION);
+        }
+      }
+      state.writeReg(instruction.rd, value);
+      TRACE("CSR", RegDst(instruction.rd), ImmValue(address));
+      TRACE_REG_WRITE(instruction.rd, value);
+      TRACE_END();
     }
 
     /// Decode and dispatch the instruction.
@@ -421,7 +502,7 @@ public:
             case 0b101: execute_BGE<trace>(instr); break;
             case 0b110: execute_BLTU<trace>(instr); break;
             case 0b111: execute_BGEU<trace>(instr); break;
-            default: throw UnknownOpcodeException("BRANCH");
+            default: throw TrapSignal(ILLEGAL_INSTRUCTION);
           }
           break;
         }
@@ -433,7 +514,7 @@ public:
             case 0b010: execute_LW<trace>(instr); break;
             case 0b100: execute_LBU<trace>(instr); break;
             case 0b101: execute_LHU<trace>(instr); break;
-            default: throw UnknownOpcodeException("LOAD");
+            default: throw TrapSignal(ILLEGAL_INSTRUCTION);
           }
           break;
         }
@@ -443,7 +524,7 @@ public:
             case 0b000: execute_SB<trace>(instr); break;
             case 0b001: execute_SH<trace>(instr); break;
             case 0b010: execute_SW<trace>(instr); break;
-            default: throw UnknownOpcodeException("STORE");
+            default: throw TrapSignal(ILLEGAL_INSTRUCTION);
           }
           break;
         }
@@ -463,11 +544,11 @@ public:
                 case 0b0000000001: execute_SLLI<trace>(shInstr); break;
                 case 0b0000000101: execute_SRLI<trace>(shInstr); break;
                 case 0b0100000101: execute_SRAI<trace>(shInstr); break;
-                default: throw UnknownOpcodeException("OP-IMM shift");
+                default: throw TrapSignal(ILLEGAL_INSTRUCTION);
               }
               break;
             }
-            default: throw UnknownOpcodeException("OP-IMM");
+            default: throw TrapSignal(ILLEGAL_INSTRUCTION);
           }
           break;
         }
@@ -484,7 +565,7 @@ public:
             case 0b0100000101: execute_SRA<trace>(regInstr); break;
             case 0b0000000110: execute_OR<trace>(regInstr); break;
             case 0b0000000111: execute_AND<trace>(regInstr); break;
-            default: throw UnknownOpcodeException("OP");
+            default: throw TrapSignal(ILLEGAL_INSTRUCTION);
           }
           break;
         }
@@ -493,24 +574,60 @@ public:
           break;
         case Opcode::SYS: {
           auto instr = InstructionIType(value);
-          switch (instr.imm) {
-            case 0b0: execute_ECALL<trace>(instr); break;
-            case 0b1: execute_EBREAK<trace>(instr); break;
-            default: throw UnknownSysImmException(instr.imm);
+          switch (instr.funct) {
+            // A zero funct3 selects the privileged instructions, which are
+            // distinguished by their immediate.
+            case 0b000:
+              switch (instr.imm) {
+                case 0x000: execute_ECALL<trace>(instr); break;
+                case 0x001: execute_EBREAK<trace>(instr); break;
+                case 0x302: execute_MRET<trace>(instr); break;
+                default: throw TrapSignal(ILLEGAL_INSTRUCTION);
+              }
+              break;
+            case 0b001: executeCSR<trace, false>(instr, 0b01); break; // CSRRW
+            case 0b010: executeCSR<trace, false>(instr, 0b10); break; // CSRRS
+            case 0b011: executeCSR<trace, false>(instr, 0b11); break; // CSRRC
+            case 0b101: executeCSR<trace, true>(instr, 0b01); break;  // CSRRWI
+            case 0b110: executeCSR<trace, true>(instr, 0b10); break;  // CSRRSI
+            case 0b111: executeCSR<trace, true>(instr, 0b11); break;  // CSRRCI
+            default: throw TrapSignal(ILLEGAL_INSTRUCTION);
           }
           break;
         }
-        default: throw UnknownOpcodeException(std::to_string(opcode));
+        default: throw TrapSignal(ILLEGAL_INSTRUCTION);
       }
     }
     // clang-format on
+
+    /// Enter a machine-mode trap, saving the address of the instruction that
+    /// raised it and vectoring to mtvec. Only direct mode is supported, so
+    /// every cause enters at the base address.
+    void enterTrap(const TrapSignal &trap) {
+      state.csrs.mepc = state.fetchAddress;
+      state.csrs.mcause = trap.cause;
+      state.csrs.mtval = trap.tval;
+      // Save the interrupt enable and disable interrupts for the handler.
+      auto mie = (state.csrs.mstatus & MSTATUS_MIE) != 0;
+      state.csrs.mstatus &= ~(MSTATUS_MIE | MSTATUS_MPIE);
+      if (mie) {
+        state.csrs.mstatus |= MSTATUS_MPIE;
+      }
+      state.csrs.mstatus |= MSTATUS_MPP;
+      state.pc = state.csrs.mtvec & ~0x3U;
+      state.branchTaken = true;
+    }
 
     /// Step the execution by one cycle.
     template<bool trace>
     void step() {
       auto fetchData = memory.readMemoryWord(state.pc);
       state.fetchAddress = state.pc;
-      dispatchInstruction<trace>(fetchData);
+      try {
+        dispatchInstruction<trace>(fetchData);
+      } catch (TrapSignal &trap) {
+        enterTrap(trap);
+      }
       auto toHostCommand = memory.readMemoryDoubleWord(toHostAddress);
       if (toHostCommand != 0) {
         handleSyscall<trace>(toHostCommand);
