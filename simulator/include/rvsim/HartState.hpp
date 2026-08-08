@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstdint>
 
+#include "CSRs.hpp"
 #include "SymbolInfo.hpp"
 
 namespace rvsim {
@@ -60,6 +61,7 @@ class HartState {
 public:
   std::array<uint32_t, NUM_REGISTERS> registers;
   uint32_t pc;
+  CSRs csrs;
   // Non-architectural.
   SymbolInfo &symbolInfo;
   uint64_t cycleCount;

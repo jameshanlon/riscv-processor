@@ -3,6 +3,8 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "bits.hpp"
@@ -30,12 +32,23 @@ public:
     return address - baseAddress;
   }
 
+  /// Check that an access lies within the simulated memory, so that a stray
+  /// address is reported rather than corrupting the host process.
+  void checkBounds(uint32_t address, size_t length) {
+    if (address < baseAddress || physicalAddr(address) + length > sizeInBytes()) {
+      throw std::runtime_error("access outside of memory at address 0x" +
+                               std::to_string(address));
+    }
+  }
+
   void read(uint32_t address, uint8_t *data, size_t length) {
+    checkBounds(address, length);
 		auto memoryPtr =  reinterpret_cast<uint8_t*>(memory.data()) + physicalAddr(address);
     std::memcpy(data, memoryPtr, length);
   }
 
   void write(uint32_t address, size_t length, uint8_t *data) {
+    checkBounds(address, length);
 		auto memoryPtr =  reinterpret_cast<uint8_t*>(memory.data()) + physicalAddr(address);
     std::memcpy(memoryPtr, data, length);
   }
